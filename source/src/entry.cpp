@@ -955,6 +955,31 @@ static void DrawSlotButton(int index, ImVec2 size)
     ImGui::PopID();
 }
 
+static void DrawPageButtons(bool vertical, float w, float h, const ImVec4& activeColor)
+{
+    for (int p = 1; p <= gCfg.pageCount; p++)
+    {
+        if (p > 1 && !vertical) ImGui::SameLine();
+        bool cur = (p == gPanelPage);
+        if (cur) ImGui::PushStyleColor(ImGuiCol_Button, activeColor);
+        char lbl[8];
+        snprintf(lbl, sizeof(lbl), "%d", p);
+        if (ImGui::Button(lbl, ImVec2(w, h))) gPanelPage = p;
+
+        if (ImGui::BeginDragDropTarget())
+        {
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("QC_PANEL_SLOT"))
+            {
+                gPanelDragFrom = *(const int*)payload->Data;
+                gPanelDropPage = p;
+            }
+            ImGui::EndDragDropTarget();
+        }
+
+        if (cur) ImGui::PopStyleColor();
+    }
+}
+
 void RenderMain()
 {
     gWantKb = ImGui::GetIO().WantCaptureKeyboard;
@@ -995,15 +1020,12 @@ void RenderMain()
             if (pad > 0.0f) ImGui::Dummy(ImVec2(0, pad));
         }
 
-        const float pageRowUnit = (gCfg.pageBtnH > 0.0f ? gCfg.pageBtnH : ImGui::GetFrameHeight())
-            + ImGui::GetStyle().ItemSpacing.y;
-        const float pageRowH = (gCfg.pageCount > 1)
-            ? ((gCfg.pageLayout == 1 ? pageRowUnit * gCfg.pageCount : pageRowUnit) + 4.0f)
-            : 0.0f;
-
-        const float reserved = (gCfg.hideChrome
+        const float bottomH = gCfg.hideChrome
             ? 0.0f
-            : ImGui::GetTextLineHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y * 2.0f + 6.0f) + pageRowH;
+            : ImGui::GetTextLineHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y * 2.0f + 6.0f;
+
+        const bool pagesVert = (gCfg.pageCount > 1 && gCfg.pageLayout == 1);
+        const float pageColW = (gCfg.pageBtnW > 0.0f ? gCfg.pageBtnW : 44.0f) + ImGui::GetStyle().ItemSpacing.x;
 
         ImVec4 btnBase = gCfg.btnColorSet
             ? ImVec4(gCfg.btnColor[0], gCfg.btnColor[1], gCfg.btnColor[2], 1.0f)
@@ -1033,7 +1055,27 @@ void RenderMain()
         ImGui::PushStyleColor(ImGuiCol_ChildBg, childBg);
 
         ImGuiWindowFlags childFlags = (gCfg.layoutMode == 1) ? ImGuiWindowFlags_HorizontalScrollbar : 0;
-        ImGui::BeginChild("##slots", ImVec2(0, -reserved), false, childFlags);
+
+        if (gCfg.pageCount > 1 && !pagesVert)
+        {
+            float spacing = ImGui::GetStyle().ItemSpacing.x;
+            float rowW = ImGui::GetContentRegionAvail().x;
+            float pw = gCfg.pageBtnW > 0.0f
+                ? gCfg.pageBtnW
+                : (rowW - spacing * (gCfg.pageCount - 1)) / gCfg.pageCount;
+            if (pw < 16.0f) pw = 16.0f;
+            DrawPageButtons(false, pw, gCfg.pageBtnH, btnActive);
+        }
+
+        if (pagesVert)
+        {
+            ImGui::BeginChild("##pages", ImVec2(pageColW, -bottomH), false);
+            DrawPageButtons(true, gCfg.pageBtnW > 0.0f ? gCfg.pageBtnW : -1.0f, gCfg.pageBtnH, btnActive);
+            ImGui::EndChild();
+            ImGui::SameLine();
+        }
+
+        ImGui::BeginChild("##slots", ImVec2(0, -bottomH), false, childFlags);
 
         bool useBigFont = (gBigFont != nullptr) && gCfg.fontScale > 1.001f;
         if (useBigFont)
@@ -1126,41 +1168,6 @@ void RenderMain()
         if (useBigFont) ImGui::PopFont();
         else ImGui::SetWindowFontScale(1.0f);
         ImGui::PopStyleColor();
-
-        if (gCfg.pageCount > 1)
-        {
-            if (gPanelPage < 1) gPanelPage = 1;
-            if (gPanelPage > gCfg.pageCount) gPanelPage = gCfg.pageCount;
-
-            float spacing = ImGui::GetStyle().ItemSpacing.x;
-            float rowW = ImGui::GetContentRegionAvail().x;
-            float pw = gCfg.pageBtnW > 0.0f
-                ? gCfg.pageBtnW
-                : ((gCfg.pageLayout == 1) ? rowW : (rowW - spacing * (gCfg.pageCount - 1)) / gCfg.pageCount);
-            if (pw < 16.0f) pw = 16.0f;
-
-            for (int p = 1; p <= gCfg.pageCount; p++)
-            {
-                if (p > 1 && gCfg.pageLayout == 0) ImGui::SameLine();
-                bool cur = (p == gPanelPage);
-                if (cur) ImGui::PushStyleColor(ImGuiCol_Button, btnActive);
-                char lbl[8];
-                snprintf(lbl, sizeof(lbl), "%d", p);
-                if (ImGui::Button(lbl, ImVec2(pw, gCfg.pageBtnH))) gPanelPage = p;
-
-                if (ImGui::BeginDragDropTarget())
-                {
-                    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("QC_PANEL_SLOT"))
-                    {
-                        gPanelDragFrom = *(const int*)payload->Data;
-                        gPanelDropPage = p;
-                    }
-                    ImGui::EndDragDropTarget();
-                }
-
-                if (cur) ImGui::PopStyleColor();
-            }
-        }
 
         if (gPanelDropPage > 0)
         {
@@ -1380,20 +1387,20 @@ void RenderOptions()
             if (ImGui::Button("删除")) removeIndex = i;
             ImGui::SameLine();
 
-            char label[192];
-            snprintf(label, sizeof(label), "第 %d 条：%s", i + 1, slot.text.empty() ? "（空）" : slot.text.c_str());
-            if (ImGui::Selectable(label, gEditSlot == i)) gEditSlot = (gEditSlot == i) ? -1 : i;
-
             if (gCfg.pageCount > 1)
             {
-                ImGui::SameLine();
                 ImGui::SetNextItemWidth(110.0f);
                 if (ImGui::SliderInt("##page", &slot.page, 1, gCfg.pageCount, "第 %d 页"))
                 {
                     if (slot.page < 1) slot.page = 1;
                     if (slot.page > gCfg.pageCount) slot.page = gCfg.pageCount;
                 }
+                ImGui::SameLine();
             }
+
+            char label[192];
+            snprintf(label, sizeof(label), "第 %d 条：%s", i + 1, slot.text.empty() ? "（空）" : slot.text.c_str());
+            if (ImGui::Selectable(label, gEditSlot == i)) gEditSlot = (gEditSlot == i) ? -1 : i;
 
             if (ImGui::BeginDragDropSource())
             {
