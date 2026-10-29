@@ -141,6 +141,15 @@ static bool gReleaseFocus = false;
 static int gEditSlot = -1;
 static int gPanelPage = 1;
 static int gPanelDropPage = 0;
+static std::vector<ImVec4> gHitRects;
+static std::vector<ImVec4> gHitRectsPrev;
+
+static void RecordHitRect()
+{
+    ImVec2 a = ImGui::GetItemRectMin();
+    ImVec2 b = ImGui::GetItemRectMax();
+    gHitRects.push_back(ImVec4(a.x, a.y, b.x, b.y));
+}
 static ImFont* gBigFont = nullptr;
 static float gBigRatio = 1.0f;
 static bool gUseMessages = true;
@@ -942,6 +951,7 @@ static void DrawSlotButton(int index, ImVec2 size)
 
     ImGui::PushID(index);
     if (ImGui::Button(slot.text.c_str(), size)) QueueSlot(index);
+    RecordHitRect();
 
     if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceNoPreviewTooltip))
     {
@@ -994,6 +1004,7 @@ static void DrawPageButtons(bool vertical, float w, float h, const ImVec4& activ
         char lbl[8];
         snprintf(lbl, sizeof(lbl), "%d", p);
         if (ImGui::Button(lbl, ImVec2(w, h))) gPanelPage = p;
+        RecordHitRect();
 
         if (ImGui::BeginDragDropTarget())
         {
@@ -1017,11 +1028,29 @@ void RenderMain()
         ImGui::SetWindowFocus(nullptr);
         gReleaseFocus = false;
     }
-    if (!gCfg.showPanel) return;
+    gHitRects.clear();
+    if (!gCfg.showPanel)
+    {
+        gHitRectsPrev.clear();
+        return;
+    }
 
     ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse;
     if (gCfg.lockPos) flags |= ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize;
     if (gCfg.hideChrome) flags |= ImGuiWindowFlags_NoTitleBar;
+
+    // 锁定位置时：鼠标不在任何按钮上，就把整个窗口设为不可交互，让点击穿透到游戏
+    if (gCfg.lockPos)
+    {
+        ImVec2 mp = ImGui::GetIO().MousePos;
+        bool overButton = false;
+        for (size_t i = 0; i < gHitRectsPrev.size(); i++)
+        {
+            const ImVec4& r = gHitRectsPrev[i];
+            if (mp.x >= r.x && mp.x <= r.z && mp.y >= r.y && mp.y <= r.w) { overButton = true; break; }
+        }
+        if (!overButton) flags |= ImGuiWindowFlags_NoInputs;
+    }
 
     ImGui::SetNextWindowSize(ImVec2(300, 400), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowBgAlpha(gCfg.alphaPct / 100.0f);
@@ -1218,7 +1247,6 @@ void RenderMain()
 
         if (!gCfg.hideChrome)
         {
-            ImGui::Separator();
             if (gStatusUntil > GetTickCount()) ImGui::TextUnformatted(gStatus.c_str());
             else ImGui::TextDisabled("点击发送，右键选频道");
         }
@@ -1226,6 +1254,9 @@ void RenderMain()
     ImGui::End();
     ImGui::PopStyleVar();
     ImGui::PopStyleColor(3);
+
+    gHitRectsPrev.swap(gHitRects);
+    gHitRects.clear();
 }
 
 static void RegisterSlotBind(int index)
