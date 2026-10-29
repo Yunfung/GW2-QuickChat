@@ -71,7 +71,7 @@ static const char* kDefaultText[10] =
 };
 
 static const int kDefaultSlotCount = 10;
-static const int kMaxSlots = 200;
+static const int kMaxSlots = 100000; // 实际上不限制，仅防解析异常数据
 
 static std::string BindId(int index)
 {
@@ -1368,7 +1368,6 @@ static void DeregisterSlotBind(int index)
 
 static void AddSlot()
 {
-    if ((int)gCfg.slots.size() >= kMaxSlots) return;
     SlotCfg slot;
     slot.enabled = true;
     gCfg.slots.push_back(slot);
