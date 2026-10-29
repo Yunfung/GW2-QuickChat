@@ -1052,8 +1052,12 @@ void RenderMain()
     }
     bool gMouseInPanel = false;
 
+    // 有弹出菜单（右键频道菜单）打开时不穿透，否则菜单点不动
+    const bool anyPopupOpen = ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
+    const bool passThrough = (gCfg.lockPos && !gOverButton && !anyPopupOpen);
+
     // 锁定位置时：鼠标不在任何按钮上，就把整个窗口设为不可交互，让点击穿透到游戏
-    if (gCfg.lockPos && !gOverButton) flags |= ImGuiWindowFlags_NoInputs;
+    if (passThrough) flags |= ImGuiWindowFlags_NoInputs;
 
     ImGui::SetNextWindowSize(ImVec2(300, 400), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowBgAlpha(gCfg.alphaPct / 100.0f);
@@ -1262,7 +1266,7 @@ void RenderMain()
     ImGui::PopStyleVar();
     ImGui::PopStyleColor(3);
 
-    if (gCfg.lockPos && !gOverButton && gMouseInPanel)
+    if (passThrough && gMouseInPanel)
     {
         ImGui::GetIO().WantCaptureMouse = false;
         ImGui::GetIO().MouseDrawCursor = false;
