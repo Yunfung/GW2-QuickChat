@@ -114,6 +114,9 @@ struct AddonCfg
     int layoutMode = 0;
     int gridCols = 3;
     int pageCount = 1;
+    int pageLayout = 0;
+    float pageBtnW = 0.0f;
+    float pageBtnH = 0.0f;
     bool gridByColumn = false;
     float btnW = 0.0f;
     float btnH = 0.0f;
@@ -136,6 +139,7 @@ static bool gWantKb = false;
 static bool gReleaseFocus = false;
 static int gEditSlot = -1;
 static int gPanelPage = 1;
+static int gPanelDropPage = 0;
 static ImFont* gBigFont = nullptr;
 static float gBigRatio = 1.0f;
 static bool gUseMessages = true;
@@ -677,6 +681,9 @@ static void SetDefaults()
     gCfg.layoutMode = 0;
     gCfg.gridCols = 3;
     gCfg.pageCount = 1;
+    gCfg.pageLayout = 0;
+    gCfg.pageBtnW = 0.0f;
+    gCfg.pageBtnH = 0.0f;
     gCfg.gridByColumn = false;
     gCfg.btnW = 0.0f;
     gCfg.btnH = 0.0f;
@@ -721,6 +728,9 @@ static void SaveCfg()
     out << "layoutMode=" << gCfg.layoutMode << "\n";
     out << "gridCols=" << gCfg.gridCols << "\n";
     out << "pageCount=" << gCfg.pageCount << "\n";
+    out << "pageLayout=" << gCfg.pageLayout << "\n";
+    out << "pageBtnW=" << gCfg.pageBtnW << "\n";
+    out << "pageBtnH=" << gCfg.pageBtnH << "\n";
     out << "gridByColumn=" << (gCfg.gridByColumn ? 1 : 0) << "\n";
     out << "btnW=" << gCfg.btnW << "\n";
     out << "btnH=" << gCfg.btnH << "\n";
@@ -781,6 +791,9 @@ static void LoadCfg()
         else if (key == "layoutMode") gCfg.layoutMode = std::min(2, std::max(0, atoi(val.c_str())));
         else if (key == "gridCols") gCfg.gridCols = std::min(10, std::max(1, atoi(val.c_str())));
         else if (key == "pageCount") gCfg.pageCount = std::min(9, std::max(1, atoi(val.c_str())));
+        else if (key == "pageLayout") gCfg.pageLayout = std::min(1, std::max(0, atoi(val.c_str())));
+        else if (key == "pageBtnW") gCfg.pageBtnW = std::min(400.0f, std::max(0.0f, (float)atof(val.c_str())));
+        else if (key == "pageBtnH") gCfg.pageBtnH = std::min(120.0f, std::max(0.0f, (float)atof(val.c_str())));
         else if (key == "gridByColumn") gCfg.gridByColumn = atoi(val.c_str()) != 0;
         else if (key == "btnW") gCfg.btnW = std::min(400.0f, std::max(0.0f, (float)atof(val.c_str())));
         else if (key == "btnH") gCfg.btnH = std::min(120.0f, std::max(0.0f, (float)atof(val.c_str())));
@@ -982,8 +995,10 @@ void RenderMain()
             if (pad > 0.0f) ImGui::Dummy(ImVec2(0, pad));
         }
 
+        const float pageRowUnit = (gCfg.pageBtnH > 0.0f ? gCfg.pageBtnH : ImGui::GetFrameHeight())
+            + ImGui::GetStyle().ItemSpacing.y;
         const float pageRowH = (gCfg.pageCount > 1)
-            ? ImGui::GetFrameHeightWithSpacing() + 4.0f
+            ? ((gCfg.pageLayout == 1 ? pageRowUnit * gCfg.pageCount : pageRowUnit) + 4.0f)
             : 0.0f;
 
         const float reserved = (gCfg.hideChrome
@@ -1118,19 +1133,48 @@ void RenderMain()
             if (gPanelPage > gCfg.pageCount) gPanelPage = gCfg.pageCount;
 
             float spacing = ImGui::GetStyle().ItemSpacing.x;
-            float btnW2 = (ImGui::GetContentRegionAvail().x - spacing * (gCfg.pageCount - 1)) / gCfg.pageCount;
-            if (btnW2 < 16.0f) btnW2 = 16.0f;
+            float rowW = ImGui::GetContentRegionAvail().x;
+            float pw = gCfg.pageBtnW > 0.0f
+                ? gCfg.pageBtnW
+                : ((gCfg.pageLayout == 1) ? rowW : (rowW - spacing * (gCfg.pageCount - 1)) / gCfg.pageCount);
+            if (pw < 16.0f) pw = 16.0f;
 
             for (int p = 1; p <= gCfg.pageCount; p++)
             {
-                if (p > 1) ImGui::SameLine();
+                if (p > 1 && gCfg.pageLayout == 0) ImGui::SameLine();
                 bool cur = (p == gPanelPage);
                 if (cur) ImGui::PushStyleColor(ImGuiCol_Button, btnActive);
                 char lbl[8];
                 snprintf(lbl, sizeof(lbl), "%d", p);
-                if (ImGui::Button(lbl, ImVec2(gCfg.btnW > 0.0f ? gCfg.btnW : btnW2, gCfg.btnH))) gPanelPage = p;
+                if (ImGui::Button(lbl, ImVec2(pw, gCfg.pageBtnH))) gPanelPage = p;
+
+                if (ImGui::BeginDragDropTarget())
+                {
+                    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("QC_PANEL_SLOT"))
+                    {
+                        gPanelDragFrom = *(const int*)payload->Data;
+                        gPanelDropPage = p;
+                    }
+                    ImGui::EndDragDropTarget();
+                }
+
                 if (cur) ImGui::PopStyleColor();
             }
+        }
+
+        if (gPanelDropPage > 0)
+        {
+            int from = gPanelDragFrom;
+            if (from >= 0 && from < (int)gCfg.slots.size())
+            {
+                int pg = gPanelDropPage;
+                if (pg < 1) pg = 1;
+                if (pg > gCfg.pageCount) pg = gCfg.pageCount;
+                gCfg.slots[from].page = pg;
+                gPanelPage = pg;
+            }
+            gPanelDragFrom = -1;
+            gPanelDropPage = 0;
         }
 
         if (gCfg.textColorSet) ImGui::PopStyleColor();
@@ -1207,12 +1251,6 @@ static void DrawSlotEditor(int index)
 
     ImGui::Indent(16.0f);
     ImGui::Checkbox("启用", &slot.enabled);
-    if (gCfg.pageCount > 1)
-    {
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(140.0f);
-        ImGui::SliderInt("页码", &slot.page, 1, gCfg.pageCount);
-    }
 
     static char editBuf[512] = {};
     static int editBufFor = -1;
@@ -1279,7 +1317,14 @@ void RenderOptions()
         }
         if (gPanelPage > gCfg.pageCount) gPanelPage = gCfg.pageCount;
     }
-    ImGui::TextDisabled("分页数 > 1 时，面板底部会出现 1/2/3… 翻页按钮；每条可单独设页码");
+    ImGui::TextDisabled("分页数 > 1 时，面板底部会出现 1/2/3… 翻页按钮；列表里每条右侧可设页码");
+    {
+        const char* pageLayouts[] = { "横向一排", "纵向一列" };
+        ImGui::Combo("分页按钮排列", &gCfg.pageLayout, pageLayouts, 2);
+        ImGui::SliderFloat("分页按钮宽度", &gCfg.pageBtnW, 0.0f, 400.0f, "%.0f");
+        ImGui::SliderFloat("分页按钮高度", &gCfg.pageBtnH, 0.0f, 120.0f, "%.0f");
+        ImGui::TextDisabled("分页按钮：宽度 0 = 横向时平分整行 / 纵向时铺满，高度 0 = 自动");
+    }
 
     ImGui::SliderFloat("按钮宽度", &gCfg.btnW, 0.0f, 400.0f, "%.0f");
     ImGui::SliderFloat("按钮高度", &gCfg.btnH, 0.0f, 120.0f, "%.0f");
@@ -1338,6 +1383,17 @@ void RenderOptions()
             char label[192];
             snprintf(label, sizeof(label), "第 %d 条：%s", i + 1, slot.text.empty() ? "（空）" : slot.text.c_str());
             if (ImGui::Selectable(label, gEditSlot == i)) gEditSlot = (gEditSlot == i) ? -1 : i;
+
+            if (gCfg.pageCount > 1)
+            {
+                ImGui::SameLine();
+                ImGui::SetNextItemWidth(110.0f);
+                if (ImGui::SliderInt("##page", &slot.page, 1, gCfg.pageCount, "第 %d 页"))
+                {
+                    if (slot.page < 1) slot.page = 1;
+                    if (slot.page > gCfg.pageCount) slot.page = gCfg.pageCount;
+                }
+            }
 
             if (ImGui::BeginDragDropSource())
             {
