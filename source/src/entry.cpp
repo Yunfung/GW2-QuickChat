@@ -146,6 +146,7 @@ static int gChannelMenuSlot = -1;
 static ImVec2 gChannelMenuPos(0, 0);
 static float gChannelMenuPivotY = 0.0f;
 static ImVec4 gChannelMenuRect(0, 0, 0, 0);
+static ImVec4 gPanelRectPrev(0, 0, 0, 0);
 static bool gLBtnPrev = false;
 static bool gRBtnPrev = false;
 static bool gChannelMenuHovered = false;
@@ -959,7 +960,11 @@ static void DrawSlotButton(int index, ImVec2 size)
     SlotCfg& slot = gCfg.slots[index];
 
     ImGui::PushID(index);
-    if (ImGui::Button(slot.text.c_str(), size)) QueueSlot(index);
+    if (ImGui::Button(slot.text.c_str(), size))
+    {
+        gChannelMenuSlot = -1;
+        QueueSlot(index);
+    }
     RecordHitRect();
 
     if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceNoPreviewTooltip))
@@ -1078,15 +1083,19 @@ void RenderMain()
     const bool menuOpen = (gChannelMenuSlot >= 0 && gChannelMenuSlot < (int)gCfg.slots.size());
     const bool mouseInMenu = (mpNow.x >= gChannelMenuRect.x && mpNow.x <= gChannelMenuRect.z &&
                               mpNow.y >= gChannelMenuRect.y && mpNow.y <= gChannelMenuRect.w);
-    const bool clickOutsideMenu = menuOpen && (lbtnPressed || rbtnPressed) && !mouseInMenu;
+    const bool mouseInPanelPrev = (mpNow.x >= gPanelRectPrev.x && mpNow.x <= gPanelRectPrev.z &&
+                                   mpNow.y >= gPanelRectPrev.y && mpNow.y <= gPanelRectPrev.w);
+    const bool clickOutsideMenu = menuOpen && (lbtnPressed || rbtnPressed) && !mouseInMenu && !gOverButton;
     const bool normalPass = (gCfg.lockPos && !gOverButton && !menuOpen);
     const bool passThrough = (normalPass || clickOutsideMenu);
 
     // 锁定位置时：鼠标不在任何按钮上，就把整个窗口设为不可交互，让点击穿透到游戏
-    if (normalPass) flags |= ImGuiWindowFlags_NoInputs;
+    if (normalPass || (clickOutsideMenu && mouseInPanelPrev)) flags |= ImGuiWindowFlags_NoInputs;
 
     ImGui::SetNextWindowSize(ImVec2(300, 400), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowBgAlpha(gCfg.alphaPct / 100.0f);
+
+    ImVec2 wp(0, 0), ws(0, 0);
 
     float panelAlpha = gCfg.alphaPct / 100.0f;
     ImVec4 titleBg = ImGui::GetStyleColorVec4(ImGuiCol_TitleBg);
@@ -1104,8 +1113,8 @@ void RenderMain()
     {
         KeepPanelOnScreen();
 
-        ImVec2 wp = ImGui::GetWindowPos();
-        ImVec2 ws = ImGui::GetWindowSize();
+        wp = ImGui::GetWindowPos();
+        ws = ImGui::GetWindowSize();
         gMouseInPanel = (mpNow.x >= wp.x && mpNow.x <= wp.x + ws.x && mpNow.y >= wp.y && mpNow.y <= wp.y + ws.y);
 
         if (gCfg.hideChrome)
@@ -1333,6 +1342,7 @@ void RenderMain()
         ImGui::GetIO().MouseDrawCursor = false;
     }
 
+    gPanelRectPrev = ImVec4(wp.x, wp.y, wp.x + ws.x, wp.y + ws.y);
     gChannelMenuHoveredPrev = gChannelMenuHovered;
     gHitRectsPrev.swap(gHitRects);
     gHitRects.clear();
