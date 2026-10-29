@@ -1714,7 +1714,7 @@ extern "C" __declspec(dllexport) AddonDefinition_t* GetAddonDef()
     AddonDef.Version.Major = 1;
     AddonDef.Version.Minor = 0;
     AddonDef.Version.Build = 0;
-    AddonDef.Version.Revision = 1;
+    AddonDef.Version.Revision = 2;
     AddonDef.Author = "摸鱼哥";
     AddonDef.Description = "游戏内显示预设句子面板，点击或按快捷键发送到多个频道。";
     AddonDef.Load = AddonLoad;
