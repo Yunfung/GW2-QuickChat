@@ -1086,11 +1086,11 @@ void RenderMain()
     const bool mouseInPanelPrev = (mpNow.x >= gPanelRectPrev.x && mpNow.x <= gPanelRectPrev.z &&
                                    mpNow.y >= gPanelRectPrev.y && mpNow.y <= gPanelRectPrev.w);
     const bool clickOutsideMenu = menuOpen && (lbtnPressed || rbtnPressed) && !mouseInMenu && !gOverButton;
-    const bool normalPass = (gCfg.lockPos && !gOverButton && !menuOpen);
+    const bool normalPass = (gCfg.lockPos && !gOverButton);
     const bool passThrough = (normalPass || clickOutsideMenu);
 
     // 锁定位置时：鼠标不在任何按钮上，就把整个窗口设为不可交互，让点击穿透到游戏
-    if (normalPass || (clickOutsideMenu && mouseInPanelPrev)) flags |= ImGuiWindowFlags_NoInputs;
+    if (passThrough) flags |= ImGuiWindowFlags_NoInputs;
 
     ImGui::SetNextWindowSize(ImVec2(300, 400), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowBgAlpha(gCfg.alphaPct / 100.0f);
@@ -1336,7 +1336,8 @@ void RenderMain()
         }
     }
 
-    if (passThrough && !overOtherWindow)
+    const bool overOurMenu = (mouseInMenu || gChannelMenuHoveredPrev);
+    if (passThrough && !overOtherWindow && !overOurMenu)
     {
         ImGui::GetIO().WantCaptureMouse = false;
         ImGui::GetIO().MouseDrawCursor = false;
