@@ -117,6 +117,7 @@ struct AddonCfg
     int pageLayout = 0;
     float pageBtnW = 0.0f;
     float pageBtnH = 0.0f;
+    float pageSelColor[3] = { 1.0f, 0.62f, 0.12f };
     bool gridByColumn = false;
     float btnW = 0.0f;
     float btnH = 0.0f;
@@ -684,6 +685,9 @@ static void SetDefaults()
     gCfg.pageLayout = 0;
     gCfg.pageBtnW = 0.0f;
     gCfg.pageBtnH = 0.0f;
+    gCfg.pageSelColor[0] = 1.0f;
+    gCfg.pageSelColor[1] = 0.62f;
+    gCfg.pageSelColor[2] = 0.12f;
     gCfg.gridByColumn = false;
     gCfg.btnW = 0.0f;
     gCfg.btnH = 0.0f;
@@ -731,6 +735,11 @@ static void SaveCfg()
     out << "pageLayout=" << gCfg.pageLayout << "\n";
     out << "pageBtnW=" << gCfg.pageBtnW << "\n";
     out << "pageBtnH=" << gCfg.pageBtnH << "\n";
+    {
+        char selBuf[64];
+        snprintf(selBuf, sizeof(selBuf), "%.3f,%.3f,%.3f", gCfg.pageSelColor[0], gCfg.pageSelColor[1], gCfg.pageSelColor[2]);
+        out << "pageSelColor=" << selBuf << "\n";
+    }
     out << "gridByColumn=" << (gCfg.gridByColumn ? 1 : 0) << "\n";
     out << "btnW=" << gCfg.btnW << "\n";
     out << "btnH=" << gCfg.btnH << "\n";
@@ -794,6 +803,16 @@ static void LoadCfg()
         else if (key == "pageLayout") gCfg.pageLayout = std::min(1, std::max(0, atoi(val.c_str())));
         else if (key == "pageBtnW") gCfg.pageBtnW = std::min(400.0f, std::max(0.0f, (float)atof(val.c_str())));
         else if (key == "pageBtnH") gCfg.pageBtnH = std::min(120.0f, std::max(0.0f, (float)atof(val.c_str())));
+        else if (key == "pageSelColor")
+        {
+            float r = 1.0f, g = 0.62f, b = 0.12f;
+            if (sscanf(val.c_str(), "%f,%f,%f", &r, &g, &b) == 3)
+            {
+                gCfg.pageSelColor[0] = std::min(1.0f, std::max(0.0f, r));
+                gCfg.pageSelColor[1] = std::min(1.0f, std::max(0.0f, g));
+                gCfg.pageSelColor[2] = std::min(1.0f, std::max(0.0f, b));
+            }
+        }
         else if (key == "gridByColumn") gCfg.gridByColumn = atoi(val.c_str()) != 0;
         else if (key == "btnW") gCfg.btnW = std::min(400.0f, std::max(0.0f, (float)atof(val.c_str())));
         else if (key == "btnH") gCfg.btnH = std::min(120.0f, std::max(0.0f, (float)atof(val.c_str())));
@@ -961,7 +980,17 @@ static void DrawPageButtons(bool vertical, float w, float h, const ImVec4& activ
     {
         if (p > 1 && !vertical) ImGui::SameLine();
         bool cur = (p == gPanelPage);
-        if (cur) ImGui::PushStyleColor(ImGuiCol_Button, activeColor);
+        ImVec4 sel(activeColor.x, activeColor.y, activeColor.z, 1.0f);
+        sel.x = gCfg.pageSelColor[0];
+        sel.y = gCfg.pageSelColor[1];
+        sel.z = gCfg.pageSelColor[2];
+        if (cur)
+        {
+            ImGui::PushStyleColor(ImGuiCol_Button, sel);
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, sel);
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, sel);
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
+        }
         char lbl[8];
         snprintf(lbl, sizeof(lbl), "%d", p);
         if (ImGui::Button(lbl, ImVec2(w, h))) gPanelPage = p;
@@ -976,7 +1005,7 @@ static void DrawPageButtons(bool vertical, float w, float h, const ImVec4& activ
             ImGui::EndDragDropTarget();
         }
 
-        if (cur) ImGui::PopStyleColor();
+        if (cur) ImGui::PopStyleColor(4);
     }
 }
 
@@ -1330,6 +1359,7 @@ void RenderOptions()
         ImGui::Combo("分页按钮排列", &gCfg.pageLayout, pageLayouts, 2);
         ImGui::SliderFloat("分页按钮宽度", &gCfg.pageBtnW, 0.0f, 400.0f, "%.0f");
         ImGui::SliderFloat("分页按钮高度", &gCfg.pageBtnH, 0.0f, 120.0f, "%.0f");
+        ImGui::ColorEdit3("当前页高亮颜色", gCfg.pageSelColor);
         ImGui::TextDisabled("分页按钮：宽度 0 = 横向时平分整行 / 纵向时铺满，高度 0 = 自动");
     }
 
