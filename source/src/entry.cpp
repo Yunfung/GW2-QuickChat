@@ -141,6 +141,9 @@ static bool gReleaseFocus = false;
 static int gEditSlot = -1;
 static int gPanelPage = 1;
 static int gPanelDropPage = 0;
+static ImVec4 gPopupRect(0, 0, 0, 0);
+static bool gPopupOpenCur = false;
+static bool gPopupOpenPrev = false;
 static std::vector<ImVec4> gHitRects;
 static std::vector<ImVec4> gHitRectsPrev;
 
@@ -972,6 +975,12 @@ static void DrawSlotButton(int index, ImVec2 size)
 
     if (ImGui::BeginPopupContextItem("##chctx"))
     {
+        {
+            ImVec2 p0 = ImGui::GetWindowPos();
+            ImVec2 s0 = ImGui::GetWindowSize();
+            gPopupRect = ImVec4(p0.x, p0.y, p0.x + s0.x, p0.y + s0.y);
+            gPopupOpenCur = true;
+        }
         ImGui::TextDisabled("发送频道");
         ImGui::Separator();
         DrawChannelItems(slot.channels);
@@ -1033,6 +1042,7 @@ void RenderMain()
         gReleaseFocus = false;
     }
     gHitRects.clear();
+    gPopupOpenCur = false;
     if (!gCfg.showPanel)
     {
         gHitRectsPrev.clear();
@@ -1052,12 +1062,21 @@ void RenderMain()
     }
     bool gMouseInPanel = false;
 
-    // 有弹出菜单（右键频道菜单）打开时不穿透，否则菜单点不动
-    const bool anyPopupOpen = ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
-    const bool passThrough = (gCfg.lockPos && !gOverButton && !anyPopupOpen);
+    // 有弹出菜单（右键频道菜单）打开时：点菜单内部正常操作；
+    // 点到菜单外面则关闭菜单并让这一下直接穿透到游戏
+    const bool popupOpen = gPopupOpenPrev;
+    bool mouseInPopup = false;
+    if (popupOpen)
+    {
+        mouseInPopup = (mpNow.x >= gPopupRect.x && mpNow.x <= gPopupRect.z &&
+                        mpNow.y >= gPopupRect.y && mpNow.y <= gPopupRect.w);
+    }
+    const bool clickOutsidePopup = popupOpen && ImGui::IsMouseClicked(0) && !mouseInPopup;
+    const bool normalPass = (gCfg.lockPos && !gOverButton && !popupOpen);
+    const bool passThrough = (normalPass || clickOutsidePopup);
 
     // 锁定位置时：鼠标不在任何按钮上，就把整个窗口设为不可交互，让点击穿透到游戏
-    if (passThrough) flags |= ImGuiWindowFlags_NoInputs;
+    if (normalPass) flags |= ImGuiWindowFlags_NoInputs;
 
     ImGui::SetNextWindowSize(ImVec2(300, 400), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowBgAlpha(gCfg.alphaPct / 100.0f);
@@ -1266,12 +1285,13 @@ void RenderMain()
     ImGui::PopStyleVar();
     ImGui::PopStyleColor(3);
 
-    if (passThrough && gMouseInPanel)
+    if (passThrough)
     {
         ImGui::GetIO().WantCaptureMouse = false;
         ImGui::GetIO().MouseDrawCursor = false;
     }
 
+    gPopupOpenPrev = gPopupOpenCur;
     gHitRectsPrev.swap(gHitRects);
     gHitRects.clear();
 }
