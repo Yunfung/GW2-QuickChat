@@ -1,0 +1,49 @@
+﻿激战2 快捷喊话（Nexus 插件）
+作者：摸鱼哥
+========================================
+
+功能
+  - 游戏内悬浮面板，点句子直接发到聊天
+  - 右键句子按钮可指定发送频道（可多选：公会1-6 / 地图 / 队伍 / 战队 / 团队 / 说）
+  - 句子条数不限，支持拖动排序
+  - 按钮排列支持纵向单排 / 横向单排 / 表格（表格可选按行或按列填充）
+  - 可调：面板背景透明度、按钮透明度、列表背景透明度、按钮颜色、文字颜色、文字大小、
+    按钮宽高、位置锁定、隐藏标题栏和底部提示
+  - 句子快捷键默认不绑定，去 Nexus → 输入绑定 里给每条单独设置；面板开关默认 CTRL+ALT+M
+
+安装
+  前提：游戏已经装好 Nexus 插件管理工具（游戏根目录有 addonLoader.dll），
+        没有 Nexus 的话 GW2 根本不会加载 addons 里的 DLL。
+
+  最简单的做法：
+    双击「快捷喊话安装-双击运行-需要游戏安装Nexus插件管理工具.bat」
+    → 选 1（安装 / 更新）
+    → 填游戏目录（放 Gw2-64.exe 的文件夹，例如 E:\Game\GuildWars2）
+
+  命令行方式：
+    powershell -ExecutionPolicy Bypass -File 快捷喊话安装.ps1 -Action 安装 -GameDir "E:\Game\GuildWars2"
+    powershell -ExecutionPolicy Bypass -File 快捷喊话安装.ps1 -Action 状态 -GameDir "E:\Game\GuildWars2"
+    powershell -ExecutionPolicy Bypass -File 快捷喊话安装.ps1 -Action 回退 -GameDir "E:\Game\GuildWars2"
+
+  说明：
+    - 安装只放 addons\QuickChat.dll，不会动你已有的配置
+    - 旧版本会先备份到 backups\ 目录
+    - 加 -DryRun 只预演，不改任何文件
+    - 插件正在使用时无法替换 DLL，脚本会提示先关游戏
+
+卸载
+  菜单选 2，或命令行加 -Action 回退；默认保留配置，要连配置一起删加 -PurgeConfig。
+
+首次使用
+  进入游戏后右上角出现「快捷喊话」面板，默认 10 条预设句子：
+    你好！ / 谢谢！ / 辛苦了~ / 集合！ / 快跑！ / 有人组队吗？ / 稍等，马上到 / 注意脚下！ / 打这个目标 / GG
+  打开 Nexus → 设置 → 快捷喊话 可以增删句子、改频道、调外观。
+
+  中文输入提示：Nexus 的文本框不支持中文输入法，改句子时先在浏览器/记事本里复制中文，
+  再点「从剪贴板粘贴」按钮。
+
+  配置文件位置：<游戏目录>\addons\QuickChat\QuickChatAddon.ini
+
+注意
+  - 国服客户端里模拟键盘输入会被拦，插件改用 Nexus 的 WndProc_SendToGameOnly 直接投递按键消息
+  - 聊天框按 GBK 双字节解码，「文字投递方式」请保持 GBK 字节，其他选项会导致游戏闪退
