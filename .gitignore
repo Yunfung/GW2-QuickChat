@@ -10,3 +10,6 @@ source/build*/
 
 # 安装脚本生成的备份
 release/backups/
+
+# 发布压缩包（作为 Release 附件，不入库）
+*.zip
