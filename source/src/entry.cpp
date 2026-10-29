@@ -147,6 +147,7 @@ static ImVec2 gChannelMenuPos(0, 0);
 static float gChannelMenuPivotY = 0.0f;
 static ImVec4 gChannelMenuRect(0, 0, 0, 0);
 static bool gLBtnPrev = false;
+static bool gRBtnPrev = false;
 static bool gChannelMenuHovered = false;
 static bool gChannelMenuHoveredPrev = false;
 static std::vector<ImVec4> gHitRects;
@@ -1069,11 +1070,15 @@ void RenderMain()
     const bool lbtnPressed = (lbtnDown && !gLBtnPrev);
     gLBtnPrev = lbtnDown;
 
+    const bool rbtnDown = (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
+    const bool rbtnPressed = (rbtnDown && !gRBtnPrev);
+    gRBtnPrev = rbtnDown;
+
     // 频道菜单打开时：点菜单内正常操作；点菜单外则关闭菜单，并让这一下直接穿透到游戏
     const bool menuOpen = (gChannelMenuSlot >= 0 && gChannelMenuSlot < (int)gCfg.slots.size());
     const bool mouseInMenu = (mpNow.x >= gChannelMenuRect.x && mpNow.x <= gChannelMenuRect.z &&
                               mpNow.y >= gChannelMenuRect.y && mpNow.y <= gChannelMenuRect.w);
-    const bool clickOutsideMenu = menuOpen && lbtnPressed && !mouseInMenu;
+    const bool clickOutsideMenu = menuOpen && (lbtnPressed || rbtnPressed) && !mouseInMenu;
     const bool normalPass = (gCfg.lockPos && !gOverButton && !menuOpen);
     const bool passThrough = (normalPass || clickOutsideMenu);
 
