@@ -990,26 +990,6 @@ void RenderMain()
             ? 0.0f
             : ImGui::GetTextLineHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y * 2.0f + 6.0f) + pageRowH;
 
-        ImVec4 childBg = ImGui::GetStyleColorVec4(ImGuiCol_WindowBg);
-        childBg.w = gCfg.listAlphaPct / 100.0f;
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, childBg);
-
-        ImGuiWindowFlags childFlags = (gCfg.layoutMode == 1) ? ImGuiWindowFlags_HorizontalScrollbar : 0;
-        ImGui::BeginChild("##slots", ImVec2(0, -reserved), false, childFlags);
-
-        bool useBigFont = (gBigFont != nullptr) && gCfg.fontScale > 1.001f;
-        if (useBigFont)
-        {
-            ImGui::PushFont(gBigFont);
-            float extra = gCfg.fontScale / gBigRatio;
-            if (extra > 1.0f) extra = 1.0f;
-            ImGui::SetWindowFontScale(extra);
-        }
-        else
-        {
-            ImGui::SetWindowFontScale(gCfg.fontScale);
-        }
-
         ImVec4 btnBase = gCfg.btnColorSet
             ? ImVec4(gCfg.btnColor[0], gCfg.btnColor[1], gCfg.btnColor[2], 1.0f)
             : ImGui::GetStyleColorVec4(ImGuiCol_Button);
@@ -1032,6 +1012,27 @@ void RenderMain()
         ImGui::PushStyleColor(ImGuiCol_ButtonActive, btnActive);
         if (gCfg.textColorSet)
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(gCfg.textColor[0], gCfg.textColor[1], gCfg.textColor[2], 1.0f));
+
+        ImVec4 childBg = ImGui::GetStyleColorVec4(ImGuiCol_WindowBg);
+        childBg.w = gCfg.listAlphaPct / 100.0f;
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, childBg);
+
+        ImGuiWindowFlags childFlags = (gCfg.layoutMode == 1) ? ImGuiWindowFlags_HorizontalScrollbar : 0;
+        ImGui::BeginChild("##slots", ImVec2(0, -reserved), false, childFlags);
+
+        bool useBigFont = (gBigFont != nullptr) && gCfg.fontScale > 1.001f;
+        if (useBigFont)
+        {
+            ImGui::PushFont(gBigFont);
+            float extra = gCfg.fontScale / gBigRatio;
+            if (extra > 1.0f) extra = 1.0f;
+            ImGui::SetWindowFontScale(extra);
+        }
+        else
+        {
+            ImGui::SetWindowFontScale(gCfg.fontScale);
+        }
+
 
         std::vector<int> visible;
         for (int i = 0; i < (int)gCfg.slots.size(); i++)
@@ -1094,7 +1095,6 @@ void RenderMain()
         }
 
         const int shown = (int)visible.size();
-        ImGui::PopStyleColor(3);
 
         if (gPanelDragFrom >= 0 && gPanelDragTo >= 0)
         {
@@ -1102,8 +1102,6 @@ void RenderMain()
             gPanelDragFrom = -1;
             gPanelDragTo = -1;
         }
-        if (gCfg.textColorSet) ImGui::PopStyleColor();
-
         if (shown == 0)
         {
             if (gCfg.pageCount > 1) ImGui::TextDisabled("本页没有句子，去 Nexus 设置里调整页码。");
@@ -1127,13 +1125,16 @@ void RenderMain()
             {
                 if (p > 1) ImGui::SameLine();
                 bool cur = (p == gPanelPage);
-                if (cur) ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+                if (cur) ImGui::PushStyleColor(ImGuiCol_Button, btnActive);
                 char lbl[8];
                 snprintf(lbl, sizeof(lbl), "%d", p);
-                if (ImGui::Button(lbl, ImVec2(btnW2, 0))) gPanelPage = p;
+                if (ImGui::Button(lbl, ImVec2(gCfg.btnW > 0.0f ? gCfg.btnW : btnW2, gCfg.btnH))) gPanelPage = p;
                 if (cur) ImGui::PopStyleColor();
             }
         }
+
+        if (gCfg.textColorSet) ImGui::PopStyleColor();
+        ImGui::PopStyleColor(3);
 
         if (!gCfg.hideChrome)
         {
