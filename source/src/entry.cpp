@@ -32,6 +32,8 @@ void AddonUnload();
 void RenderOptions();
 void OnInputBind(const char* aIdentifier, bool aIsRelease);
 static void MoveSlotTo(int from, int to);
+static void SortSlotsByPage(int* follow);
+static void MoveSlotToPage(int index, int page);
 
 /* globals */
 static AddonDefinition_t AddonDef = {};
@@ -910,6 +912,7 @@ static void LoadCfg()
         if (gCfg.slots[i].page < 1) gCfg.slots[i].page = 1;
         if (gCfg.slots[i].page > gCfg.pageCount) gCfg.slots[i].page = gCfg.pageCount;
     }
+    SortSlotsByPage(nullptr);
 }
 
 ///----------------------------------------------------------------------------------------------------
@@ -1281,7 +1284,7 @@ void RenderMain()
                 int pg = gPanelDropPage;
                 if (pg < 1) pg = 1;
                 if (pg > gCfg.pageCount) pg = gCfg.pageCount;
-                gCfg.slots[from].page = pg;
+                MoveSlotToPage(from, pg);
                 gPanelPage = pg;
             }
             gPanelDragFrom = -1;
@@ -1399,6 +1402,56 @@ static void MoveSlotTo(int from, int to)
     if (gEditSlot == from) gEditSlot = to;
     else if (from < gEditSlot && to >= gEditSlot) gEditSlot--;
     else if (from > gEditSlot && to <= gEditSlot) gEditSlot++;
+}
+
+static void SortSlotsByPage(int* follow)
+{
+    int n = (int)gCfg.slots.size();
+    if (n <= 1) return;
+
+    std::vector<int> order((size_t)n);
+    for (int i = 0; i < n; i++) order[(size_t)i] = i;
+
+    std::stable_sort(order.begin(), order.end(), [](int a, int b) {
+        return gCfg.slots[(size_t)a].page < gCfg.slots[(size_t)b].page;
+    });
+
+    bool changed = false;
+    for (int i = 0; i < n; i++) if (order[(size_t)i] != i) { changed = true; break; }
+    if (!changed) return;
+
+    std::vector<SlotCfg> sorted;
+    sorted.reserve((size_t)n);
+    int newFollow = -1;
+    for (int i = 0; i < n; i++)
+    {
+        sorted.push_back(gCfg.slots[(size_t)order[(size_t)i]]);
+        if (follow && *follow == order[(size_t)i]) newFollow = i;
+    }
+    gCfg.slots.swap(sorted);
+    if (follow && newFollow >= 0) *follow = newFollow;
+}
+
+// 把某条移动到指定页，并放在该页最后
+static void MoveSlotToPage(int index, int page)
+{
+    int n = (int)gCfg.slots.size();
+    if (index < 0 || index >= n) return;
+    if (page < 1) page = 1;
+    if (page > gCfg.pageCount) page = gCfg.pageCount;
+    if (gCfg.slots[(size_t)index].page == page && index == n - 1) { gCfg.slots[(size_t)index].page = page; return; }
+
+    SlotCfg moved = gCfg.slots[(size_t)index];
+    moved.page = page;
+    gCfg.slots.erase(gCfg.slots.begin() + index);
+
+    int insertAt = 0;
+    while (insertAt < (int)gCfg.slots.size() && gCfg.slots[(size_t)insertAt].page <= page) insertAt++;
+    gCfg.slots.insert(gCfg.slots.begin() + insertAt, moved);
+
+    if (gEditSlot == index) gEditSlot = insertAt;
+    else if (index < gEditSlot && insertAt > gEditSlot) gEditSlot--;
+    else if (index > gEditSlot && insertAt <= gEditSlot) gEditSlot++;
 }
 
 static void DrawSlotEditor(int index)
@@ -1520,6 +1573,7 @@ void RenderOptions()
     int removeIndex = -1;
     int moveIndex = -1;
     int moveDir = 0;
+    bool sortNeeded = false;
     int dragFrom = -1;
     int dragTo = -1;
 
@@ -1546,6 +1600,7 @@ void RenderOptions()
                     if (slot.page < 1) slot.page = 1;
                     if (slot.page > gCfg.pageCount) slot.page = gCfg.pageCount;
                 }
+                if (ImGui::IsItemDeactivatedAfterEdit()) sortNeeded = true;
                 ImGui::SameLine();
             }
 
@@ -1582,6 +1637,8 @@ void RenderOptions()
     }
 
     if (dragFrom >= 0 && dragTo >= 0) MoveSlotTo(dragFrom, dragTo);
+
+    if (sortNeeded) SortSlotsByPage(&gEditSlot);
 
     if (moveIndex >= 0)
     {
