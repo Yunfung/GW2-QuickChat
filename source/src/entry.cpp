@@ -978,8 +978,12 @@ static void DrawSlotButton(int index, ImVec2 size)
         ImGui::EndPopup();
     }
 
-    if (ImGui::IsItemHovered() && !slot.channels.empty())
-        ImGui::SetTooltip("%s", ChannelSummary(slot.channels).c_str());
+    if (ImGui::IsItemHovered())
+    {
+        std::string ch = ChannelSummary(slot.channels);
+        if (ch.empty()) ch = "当前频道";
+        ImGui::SetTooltip("%s\n%s", ch.c_str(), slot.text.c_str());
+    }
 
     ImGui::PopID();
 }
@@ -1039,18 +1043,17 @@ void RenderMain()
     if (gCfg.lockPos) flags |= ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize;
     if (gCfg.hideChrome) flags |= ImGuiWindowFlags_NoTitleBar;
 
-    // 锁定位置时：鼠标不在任何按钮上，就把整个窗口设为不可交互，让点击穿透到游戏
-    if (gCfg.lockPos)
+    ImVec2 mpNow = ImGui::GetIO().MousePos;
+    bool gOverButton = false;
+    for (size_t i = 0; i < gHitRectsPrev.size(); i++)
     {
-        ImVec2 mp = ImGui::GetIO().MousePos;
-        bool overButton = false;
-        for (size_t i = 0; i < gHitRectsPrev.size(); i++)
-        {
-            const ImVec4& r = gHitRectsPrev[i];
-            if (mp.x >= r.x && mp.x <= r.z && mp.y >= r.y && mp.y <= r.w) { overButton = true; break; }
-        }
-        if (!overButton) flags |= ImGuiWindowFlags_NoInputs;
+        const ImVec4& r = gHitRectsPrev[i];
+        if (mpNow.x >= r.x && mpNow.x <= r.z && mpNow.y >= r.y && mpNow.y <= r.w) { gOverButton = true; break; }
     }
+    bool gMouseInPanel = false;
+
+    // 锁定位置时：鼠标不在任何按钮上，就把整个窗口设为不可交互，让点击穿透到游戏
+    if (gCfg.lockPos && !gOverButton) flags |= ImGuiWindowFlags_NoInputs;
 
     ImGui::SetNextWindowSize(ImVec2(300, 400), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowBgAlpha(gCfg.alphaPct / 100.0f);
@@ -1070,6 +1073,10 @@ void RenderMain()
     if (ImGui::Begin("快捷喊话##quickchat_main", gCfg.hideChrome ? nullptr : &gCfg.showPanel, flags))
     {
         KeepPanelOnScreen();
+
+        ImVec2 wp = ImGui::GetWindowPos();
+        ImVec2 ws = ImGui::GetWindowSize();
+        gMouseInPanel = (mpNow.x >= wp.x && mpNow.x <= wp.x + ws.x && mpNow.y >= wp.y && mpNow.y <= wp.y + ws.y);
 
         if (gCfg.hideChrome)
         {
@@ -1254,6 +1261,12 @@ void RenderMain()
     ImGui::End();
     ImGui::PopStyleVar();
     ImGui::PopStyleColor(3);
+
+    if (gCfg.lockPos && !gOverButton && gMouseInPanel)
+    {
+        ImGui::GetIO().WantCaptureMouse = false;
+        ImGui::GetIO().MouseDrawCursor = false;
+    }
 
     gHitRectsPrev.swap(gHitRects);
     gHitRects.clear();
