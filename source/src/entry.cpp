@@ -1286,8 +1286,19 @@ void RenderMain()
     ImGui::PopStyleVar();
     ImGui::PopStyleColor(3);
 
-    bool overNothing = (ImGui::GetCurrentContext() && ImGui::GetCurrentContext()->HoveredWindow == nullptr);
-    if (passThrough && (gMouseInPanel || overNothing))
+    bool overOtherWindow = false;
+    {
+        ImGuiContext* ctx = ImGui::GetCurrentContext();
+        ImGuiWindow* hw = ctx ? ctx->HoveredWindow : nullptr;
+        if (hw && !gMouseInPanel && !mouseInPopup)
+        {
+            ImVec2 a = hw->Pos;
+            ImVec2 b(hw->Pos.x + hw->Size.x, hw->Pos.y + hw->Size.y);
+            overOtherWindow = (mpNow.x >= a.x && mpNow.x <= b.x && mpNow.y >= a.y && mpNow.y <= b.y);
+        }
+    }
+
+    if (passThrough && !overOtherWindow)
     {
         ImGui::GetIO().WantCaptureMouse = false;
         ImGui::GetIO().MouseDrawCursor = false;
