@@ -142,9 +142,10 @@ static bool gReleaseFocus = false;
 static int gEditSlot = -1;
 static int gPanelPage = 1;
 static int gPanelDropPage = 0;
-static ImVec4 gPopupRect(0, 0, 0, 0);
-static bool gPopupOpenCur = false;
-static bool gPopupOpenPrev = false;
+static int gChannelMenuSlot = -1;
+static ImVec2 gChannelMenuPos(0, 0);
+static bool gChannelMenuHovered = false;
+static bool gChannelMenuHoveredPrev = false;
 static std::vector<ImVec4> gHitRects;
 static std::vector<ImVec4> gHitRectsPrev;
 
@@ -974,22 +975,16 @@ static void DrawSlotButton(int index, ImVec2 size)
         ImGui::EndDragDropTarget();
     }
 
-    if (ImGui::BeginPopupContextItem("##chctx"))
-    {
-        {
-            ImVec2 p0 = ImGui::GetWindowPos();
-            ImVec2 s0 = ImGui::GetWindowSize();
-            gPopupRect = ImVec4(p0.x, p0.y, p0.x + s0.x, p0.y + s0.y);
-            gPopupOpenCur = true;
-        }
-        ImGui::TextDisabled("发送频道");
-        ImGui::Separator();
-        DrawChannelItems(slot.channels);
-        ImGui::EndPopup();
-    }
-
     if (ImGui::IsItemHovered())
     {
+        if (ImGui::IsMouseClicked(1))
+        {
+            gChannelMenuSlot = index;
+            ImVec2 rmin = ImGui::GetItemRectMin();
+            ImVec2 rmax = ImGui::GetItemRectMax();
+            gChannelMenuPos = ImVec2(rmin.x, rmax.y + 2.0f);
+        }
+
         std::string ch = ChannelSummary(slot.channels);
         if (ch.empty()) ch = "当前频道";
         ImGui::SetTooltip("%s\n%s", ch.c_str(), slot.text.c_str());
@@ -1043,7 +1038,7 @@ void RenderMain()
         gReleaseFocus = false;
     }
     gHitRects.clear();
-    gPopupOpenCur = false;
+    gChannelMenuHovered = false;
     if (!gCfg.showPanel)
     {
         gHitRectsPrev.clear();
@@ -1063,18 +1058,11 @@ void RenderMain()
     }
     bool gMouseInPanel = false;
 
-    // 有弹出菜单（右键频道菜单）打开时：点菜单内部正常操作；
-    // 点到菜单外面则关闭菜单并让这一下直接穿透到游戏
-    const bool popupOpen = gPopupOpenPrev;
-    bool mouseInPopup = false;
-    if (popupOpen)
-    {
-        mouseInPopup = (mpNow.x >= gPopupRect.x && mpNow.x <= gPopupRect.z &&
-                        mpNow.y >= gPopupRect.y && mpNow.y <= gPopupRect.w);
-    }
-    const bool clickOutsidePopup = popupOpen && ImGui::IsMouseClicked(0) && !mouseInPopup;
-    const bool normalPass = (gCfg.lockPos && !gOverButton && !popupOpen);
-    const bool passThrough = (normalPass || clickOutsidePopup);
+    // 频道菜单打开时：点菜单内正常操作；点菜单外则关闭菜单，并让这一下直接穿透到游戏
+    const bool menuOpen = (gChannelMenuSlot >= 0 && gChannelMenuSlot < (int)gCfg.slots.size());
+    const bool clickOutsideMenu = menuOpen && ImGui::IsMouseClicked(0) && !gChannelMenuHoveredPrev;
+    const bool normalPass = (gCfg.lockPos && !gOverButton && !menuOpen);
+    const bool passThrough = (normalPass || clickOutsideMenu);
 
     // 锁定位置时：鼠标不在任何按钮上，就把整个窗口设为不可交互，让点击穿透到游戏
     if (normalPass) flags |= ImGuiWindowFlags_NoInputs;
@@ -1276,6 +1264,23 @@ void RenderMain()
         if (gCfg.textColorSet) ImGui::PopStyleColor();
         ImGui::PopStyleColor(3);
 
+        if (gChannelMenuSlot >= 0 && gChannelMenuSlot < (int)gCfg.slots.size())
+        {
+            ImGui::SetNextWindowPos(gChannelMenuPos, ImGuiCond_Always);
+            ImGui::SetNextWindowSizeConstraints(ImVec2(150.0f, 0.0f), ImVec2(420.0f, 900.0f));
+            ImGui::Begin("##qc_chmenu", nullptr,
+                ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize |
+                ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |
+                ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoMove);
+            ImGui::TextDisabled("发送频道");
+            ImGui::Separator();
+            DrawChannelItems(gCfg.slots[gChannelMenuSlot].channels);
+            gChannelMenuHovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows);
+            ImGui::End();
+
+            if (clickOutsideMenu) gChannelMenuSlot = -1;
+        }
+
         if (!gCfg.hideChrome)
         {
             if (gStatusUntil > GetTickCount()) ImGui::TextUnformatted(gStatus.c_str());
@@ -1290,7 +1295,7 @@ void RenderMain()
     {
         ImGuiContext* ctx = ImGui::GetCurrentContext();
         ImGuiWindow* hw = ctx ? ctx->HoveredWindow : nullptr;
-        if (hw && !gMouseInPanel && !mouseInPopup)
+        if (hw && !gMouseInPanel && !gChannelMenuHoveredPrev)
         {
             ImVec2 a = hw->Pos;
             ImVec2 b(hw->Pos.x + hw->Size.x, hw->Pos.y + hw->Size.y);
@@ -1304,7 +1309,7 @@ void RenderMain()
         ImGui::GetIO().MouseDrawCursor = false;
     }
 
-    gPopupOpenPrev = gPopupOpenCur;
+    gChannelMenuHoveredPrev = gChannelMenuHovered;
     gHitRectsPrev.swap(gHitRects);
     gHitRects.clear();
 }
