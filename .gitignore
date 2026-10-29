@@ -1,0 +1,12 @@
+# 编译产物
+source/bin/
+source/obj/
+source/build*/ 
+*.user
+*.pdb
+*.lib
+*.exp
+*.ilk
+
+# 安装脚本生成的备份
+release/backups/
