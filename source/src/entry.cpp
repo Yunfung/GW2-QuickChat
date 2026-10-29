@@ -22,6 +22,7 @@
 
 #include "nexus/Nexus.h"
 #include "imgui/imgui.h"
+#include "imgui/imgui_internal.h"
 
 #pragma comment(lib, "user32.lib")
 
@@ -1285,7 +1286,8 @@ void RenderMain()
     ImGui::PopStyleVar();
     ImGui::PopStyleColor(3);
 
-    if (passThrough)
+    bool overNothing = (ImGui::GetCurrentContext() && ImGui::GetCurrentContext()->HoveredWindow == nullptr);
+    if (passThrough && (gMouseInPanel || overNothing))
     {
         ImGui::GetIO().WantCaptureMouse = false;
         ImGui::GetIO().MouseDrawCursor = false;
