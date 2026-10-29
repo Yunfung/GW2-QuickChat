@@ -145,6 +145,8 @@ static int gPanelDropPage = 0;
 static int gChannelMenuSlot = -1;
 static ImVec2 gChannelMenuPos(0, 0);
 static float gChannelMenuPivotY = 0.0f;
+static ImVec4 gChannelMenuRect(0, 0, 0, 0);
+static bool gLBtnPrev = false;
 static bool gChannelMenuHovered = false;
 static bool gChannelMenuHoveredPrev = false;
 static std::vector<ImVec4> gHitRects;
@@ -1062,9 +1064,16 @@ void RenderMain()
     }
     bool gMouseInPanel = false;
 
+    // 用原始 Win32 状态检测左键按下：菜单开着时，即使这一下被放行给游戏，也能立刻关闭菜单
+    const bool lbtnDown = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
+    const bool lbtnPressed = (lbtnDown && !gLBtnPrev);
+    gLBtnPrev = lbtnDown;
+
     // 频道菜单打开时：点菜单内正常操作；点菜单外则关闭菜单，并让这一下直接穿透到游戏
     const bool menuOpen = (gChannelMenuSlot >= 0 && gChannelMenuSlot < (int)gCfg.slots.size());
-    const bool clickOutsideMenu = menuOpen && ImGui::IsMouseClicked(0) && !gChannelMenuHoveredPrev;
+    const bool mouseInMenu = (mpNow.x >= gChannelMenuRect.x && mpNow.x <= gChannelMenuRect.z &&
+                              mpNow.y >= gChannelMenuRect.y && mpNow.y <= gChannelMenuRect.w);
+    const bool clickOutsideMenu = menuOpen && lbtnPressed && !mouseInMenu;
     const bool normalPass = (gCfg.lockPos && !gOverButton && !menuOpen);
     const bool passThrough = (normalPass || clickOutsideMenu);
 
@@ -1277,6 +1286,11 @@ void RenderMain()
                 ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |
                 ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoMove);
             ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow());
+            {
+                ImVec2 p0 = ImGui::GetWindowPos();
+                ImVec2 s0 = ImGui::GetWindowSize();
+                gChannelMenuRect = ImVec4(p0.x, p0.y, p0.x + s0.x, p0.y + s0.y);
+            }
             ImGui::TextDisabled("发送频道");
             ImGui::Separator();
             DrawChannelItems(gCfg.slots[gChannelMenuSlot].channels);
