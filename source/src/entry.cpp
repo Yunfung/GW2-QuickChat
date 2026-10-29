@@ -144,6 +144,7 @@ static int gPanelPage = 1;
 static int gPanelDropPage = 0;
 static int gChannelMenuSlot = -1;
 static ImVec2 gChannelMenuPos(0, 0);
+static float gChannelMenuPivotY = 0.0f;
 static bool gChannelMenuHovered = false;
 static bool gChannelMenuHoveredPrev = false;
 static std::vector<ImVec4> gHitRects;
@@ -982,7 +983,10 @@ static void DrawSlotButton(int index, ImVec2 size)
             gChannelMenuSlot = index;
             ImVec2 rmin = ImGui::GetItemRectMin();
             ImVec2 rmax = ImGui::GetItemRectMax();
-            gChannelMenuPos = ImVec2(rmin.x, rmax.y + 2.0f);
+            const float estH = 340.0f;
+            bool goAbove = (rmax.y + estH > ImGui::GetIO().DisplaySize.y);
+            gChannelMenuPivotY = goAbove ? 1.0f : 0.0f;
+            gChannelMenuPos = ImVec2(rmin.x, goAbove ? rmin.y - 2.0f : rmax.y + 2.0f);
         }
 
         std::string ch = ChannelSummary(slot.channels);
@@ -1266,12 +1270,13 @@ void RenderMain()
 
         if (gChannelMenuSlot >= 0 && gChannelMenuSlot < (int)gCfg.slots.size())
         {
-            ImGui::SetNextWindowPos(gChannelMenuPos, ImGuiCond_Always);
+            ImGui::SetNextWindowPos(gChannelMenuPos, ImGuiCond_Always, ImVec2(0.0f, gChannelMenuPivotY));
             ImGui::SetNextWindowSizeConstraints(ImVec2(150.0f, 0.0f), ImVec2(420.0f, 900.0f));
             ImGui::Begin("##qc_chmenu", nullptr,
                 ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize |
                 ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |
                 ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoMove);
+            ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow());
             ImGui::TextDisabled("发送频道");
             ImGui::Separator();
             DrawChannelItems(gCfg.slots[gChannelMenuSlot].channels);
