@@ -293,6 +293,24 @@ static bool IsKnownChannel(const std::string& code)
     return false;
 }
 
+static std::string ChannelNamesText(const std::vector<std::string>& list)
+{
+    std::string out;
+    for (size_t i = 0; i < list.size(); i++)
+    {
+        const char* name = list[i].c_str();
+        for (int c = 0; c < kChannelCount; c++)
+        {
+            if (list[i] == kChannels[c].code) { name = kChannels[c].name; break; }
+        }
+        if (!out.empty()) out += "、";
+        out += name;
+        out += " /";
+        out += list[i];
+    }
+    return out;
+}
+
 static std::string ChannelSummary(const std::vector<std::string>& list)
 {
     std::string out;
@@ -1034,7 +1052,7 @@ static void DrawSlotButton(int index, ImVec2 size)
             gChannelMenuPos = ImVec2(rmin.x, goAbove ? rmin.y - 2.0f : rmax.y + 2.0f);
         }
 
-        std::string ch = ChannelSummary(slot.channels);
+        std::string ch = ChannelNamesText(slot.channels);
         if (ch.empty()) ch = "当前频道";
         ImVec2 rmaxT = ImGui::GetItemRectMax();
         ImGuiIO& tio = ImGui::GetIO();
