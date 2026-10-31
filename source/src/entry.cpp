@@ -1498,6 +1498,16 @@ static std::string ProfilePath(const std::string& name)
     return ConfigDir() + "\\profiles\\" + name + ".ini";
 }
 
+static std::string TimestampSuffix()
+{
+    SYSTEMTIME st;
+    GetLocalTime(&st);
+    char buf[40];
+    snprintf(buf, sizeof(buf), "-%04u%02u%02u-%02u%02u%02u",
+        st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+    return std::string(buf);
+}
+
 static std::string CleanPath(const char* in)
 {
     std::string p = TrimRight(in);
@@ -1519,7 +1529,7 @@ static std::string NormalizeConfigPath(const std::string& raw, bool forExport)
     {
         if (!p.empty() && (p.back() == '\\' || p.back() == '/')) {}
         else p += "\\";
-        p += "QuickChat-config.ini";
+        p += "QuickChat-config" + TimestampSuffix() + ".ini";
         return p;
     }
 
