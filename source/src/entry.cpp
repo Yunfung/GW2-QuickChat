@@ -1036,7 +1036,21 @@ static void DrawSlotButton(int index, ImVec2 size)
 
         std::string ch = ChannelSummary(slot.channels);
         if (ch.empty()) ch = "当前频道";
-        ImGui::SetTooltip("%s\n%s", ch.c_str(), slot.text.c_str());
+        ImVec2 rmaxT = ImGui::GetItemRectMax();
+        ImGuiIO& tio = ImGui::GetIO();
+        float tipX = rmaxT.x + 22.0f;
+        float tipY = rmaxT.y + 22.0f;
+        if (tipX > tio.DisplaySize.x - 140.0f) tipX = tio.DisplaySize.x - 140.0f;
+        if (tipY > tio.DisplaySize.y - 70.0f) tipY = tio.DisplaySize.y - 70.0f;
+        ImGui::SetNextWindowPos(ImVec2(tipX, tipY), ImGuiCond_Always);
+        ImGui::Begin("##qc_tip", nullptr,
+            ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_AlwaysAutoResize |
+            ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav |
+            ImGuiWindowFlags_NoMove);
+        ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow());
+        ImGui::TextDisabled("%s", ch.c_str());
+        ImGui::TextUnformatted(slot.text.c_str());
+        ImGui::End();
     }
 
     ImGui::PopID();
