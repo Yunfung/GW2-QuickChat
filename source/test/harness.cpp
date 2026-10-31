@@ -191,11 +191,11 @@ int main()
     for (size_t i = 0; i < expected.size(); i++) printf("  [%d] %s\n", (int)i, expected[i].c_str());
 
     INPUTBINDS_PROCESS handler = nullptr;
-    std::map<std::string, INPUTBINDS_PROCESS>::iterator it = gBinds.find("QUICKCHAT_SLOT_001");
+    std::map<std::string, INPUTBINDS_PROCESS>::iterator it = gBinds.find("快捷喊话-第001条");
     if (it != gBinds.end()) handler = it->second;
     if (!handler) { printf("FAIL: bind not registered\n"); return 1; }
 
-    handler("QUICKCHAT_SLOT_001", false);
+    handler("快捷喊话-第001条", false);
     DWORD start = GetTickCount();
     while (GetTickCount() - start < 8000 && gRecLines.size() < expected.size())
     {

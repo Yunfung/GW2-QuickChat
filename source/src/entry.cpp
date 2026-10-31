@@ -74,10 +74,13 @@ static const char* kDefaultText[10] =
 static const int kDefaultSlotCount = 10;
 static const int kMaxSlots = 100000; // 实际上不限制，仅防解析异常数据
 
+static const char* kSlotIdPrefix = "快捷喊话-第";
+static const char* kToggleId = "快捷喊话-显示面板";
+
 static std::string BindId(int index)
 {
-    char buf[32];
-    snprintf(buf, sizeof(buf), "QUICKCHAT_SLOT_%03d", index + 1);
+    char buf[64];
+    snprintf(buf, sizeof(buf), "%s%03d条", kSlotIdPrefix, index + 1);
     return buf;
 }
 
@@ -2214,7 +2217,7 @@ void RenderOptions()
     if (ImGui::CollapsingHeader("快捷键###hotkeys_section"))
     {
         ImGui::TextDisabled("每条句子的快捷键在 Nexus → 输入绑定 里单独设置，默认都不绑定。");
-        ImGui::TextDisabled("显示/隐藏悬浮面板：绑定名 QUICKCHAT_PANEL，默认 F9。");
+        ImGui::TextDisabled("显示/隐藏悬浮面板：绑定名「快捷喊话-显示面板」，默认 F9。");
         ImGui::TextDisabled("注意：快捷键按条目序号对应，拖动或删除条目后要重新确认。");
     }
 
@@ -2237,15 +2240,16 @@ void OnInputBind(const char* aIdentifier, bool aIsRelease)
 {
     if (aIsRelease || !aIdentifier) return;
 
-    if (strcmp(aIdentifier, "QUICKCHAT_PANEL") == 0 || strcmp(aIdentifier, "QUICKCHAT_TOGGLE") == 0)
+    if (strcmp(aIdentifier, kToggleId) == 0 ||
+        strcmp(aIdentifier, "QUICKCHAT_PANEL") == 0 ||
+        strcmp(aIdentifier, "QUICKCHAT_TOGGLE") == 0)
     {
         gCfg.showPanel = !gCfg.showPanel;
         return;
     }
 
-    const char* prefix = "QUICKCHAT_SLOT_";
-    size_t len = strlen(prefix);
-    if (strncmp(aIdentifier, prefix, len) == 0)
+    size_t len = strlen(kSlotIdPrefix);
+    if (strncmp(aIdentifier, kSlotIdPrefix, len) == 0)
     {
         int index = atoi(aIdentifier + len) - 1;
         if (index >= 0 && index < (int)gCfg.slots.size()) QueueSlot(index);
@@ -2318,8 +2322,14 @@ void AddonLoad(AddonAPI_t* aApi)
     APIDefs->GUI_Register(RT_OptionsRender, RenderOptions);
 
     for (int i = 0; i < (int)gCfg.slots.size(); i++) RegisterSlotBind(i);
-    APIDefs->InputBinds_Deregister("QUICKCHAT_TOGGLE");
-    APIDefs->InputBinds_RegisterWithString("QUICKCHAT_PANEL", OnInputBind, "F9");
+    for (int i = 0; i < 256; i++)
+    {
+        char legacy[40];
+        snprintf(legacy, sizeof(legacy), "QUICKCHAT_SLOT_%03d", i + 1);
+        APIDefs->InputBinds_Deregister(legacy);
+    }
+    APIDefs->InputBinds_Deregister(kToggleId);
+    APIDefs->InputBinds_RegisterWithString(kToggleId, OnInputBind, "F9");
 
     gWorkerStop = false;
     gWorker = std::thread(WorkerLoop);
