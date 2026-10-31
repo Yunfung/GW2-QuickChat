@@ -1453,6 +1453,57 @@ static void MoveSlotToPage(int index, int page)
     else if (index > gEditSlot && insertAt <= gEditSlot) gEditSlot++;
 }
 
+static void RefreshSlotBinds(int oldCount, int newCount)
+{
+    for (int i = 0; i < oldCount; i++) DeregisterSlotBind(i);
+    for (int i = 0; i < newCount; i++) RegisterSlotBind(i);
+}
+
+static std::string ConfigDir()
+{
+    size_t sep = gCfgPath.find_last_of('\\');
+    return (sep == std::string::npos) ? std::string(".") : gCfgPath.substr(0, sep);
+}
+
+static std::string ProfilePath(const std::string& name)
+{
+    return ConfigDir() + "\\profiles\\" + name + ".ini";
+}
+
+static void ListProfiles(std::vector<std::string>& out)
+{
+    out.clear();
+    std::string pattern = ConfigDir() + "\\profiles\\*.ini";
+    WIN32_FIND_DATAA fd;
+    HANDLE h = FindFirstFileA(pattern.c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) return;
+    do
+    {
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+        std::string n = fd.cFileName;
+        if (n.size() > 4 && n.compare(n.size() - 4, 4, ".ini") == 0)
+            out.push_back(n.substr(0, n.size() - 4));
+    } while (FindNextFileA(h, &fd));
+    FindClose(h);
+    std::sort(out.begin(), out.end());
+}
+
+// 用一份配置文件替换当前配置并重新加载（快捷键绑定同步增删）
+static bool ApplyConfigFile(const std::string& path)
+{
+    if (!CopyFileA(path.c_str(), gCfgPath.c_str(), FALSE)) return false;
+
+    int oldCount = (int)gCfg.slots.size();
+    gEditSlot = -1;
+    gPanelPage = 1;
+    gChannelMenuSlot = -1;
+    LoadCfg();
+    RefreshSlotBinds(oldCount, (int)gCfg.slots.size());
+    gStatus = "已切换配置";
+    gStatusUntil = GetTickCount() + 3000;
+    return true;
+}
+
 static void DrawSlotEditor(int index)
 {
     if (index < 0 || index >= (int)gCfg.slots.size()) return;
@@ -1651,6 +1702,132 @@ void RenderOptions()
         if (gEditSlot > removeIndex) gEditSlot--;
     }
     if (gEditSlot >= (int)gCfg.slots.size()) gEditSlot = -1;
+
+    if (ImGui::CollapsingHeader("配置管理###cfg_section"))
+    {
+        static std::vector<std::string> profiles;
+        static bool profilesLoaded = false;
+        static int sel = -1;
+        static char nameBuf[64] = "";
+        static char pathBuf[260] = "";
+        static std::string cfgMsg;
+
+        if (!profilesLoaded)
+        {
+            CreateDirectoryA((ConfigDir() + "\\profiles").c_str(), nullptr);
+            ListProfiles(profiles);
+            profilesLoaded = true;
+        }
+
+        ImGui::TextDisabled("当前配置：%s", gCfgPath.c_str());
+
+        ImGui::SetNextItemWidth(200.0f);
+        const char* preview = (sel >= 0 && sel < (int)profiles.size()) ? profiles[(size_t)sel].c_str() : "（未选择）";
+        if (ImGui::BeginCombo("配置列表", preview))
+        {
+            for (int i = 0; i < (int)profiles.size(); i++)
+            {
+                if (ImGui::Selectable(profiles[(size_t)i].c_str(), sel == i)) sel = i;
+            }
+            ImGui::EndCombo();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("刷新"))
+        {
+            ListProfiles(profiles);
+            if (sel >= (int)profiles.size()) sel = -1;
+        }
+
+        bool hasSel = (sel >= 0 && sel < (int)profiles.size());
+
+        if (ImGui::Button("保存到选中")) 
+        {
+            if (hasSel)
+            {
+                SaveCfg();
+                CreateDirectoryA((ConfigDir() + "\\profiles").c_str(), nullptr);
+                if (CopyFileA(gCfgPath.c_str(), ProfilePath(profiles[(size_t)sel]).c_str(), FALSE))
+                    cfgMsg = "已保存到 " + profiles[(size_t)sel];
+                else cfgMsg = "保存失败";
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("加载选中"))
+        {
+            if (hasSel)
+                cfgMsg = ApplyConfigFile(ProfilePath(profiles[(size_t)sel])) ? ("已加载 " + profiles[(size_t)sel]) : "加载失败";
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("删除选中"))
+        {
+            if (hasSel)
+            {
+                DeleteFileA(ProfilePath(profiles[(size_t)sel]).c_str());
+                cfgMsg = "已删除 " + profiles[(size_t)sel];
+                ListProfiles(profiles);
+                sel = -1;
+            }
+        }
+
+        ImGui::SetNextItemWidth(160.0f);
+        ImGui::InputText("新配置名", nameBuf, sizeof(nameBuf));
+        ImGui::SameLine();
+        if (ImGui::Button("另存为新配置"))
+        {
+            std::string n = TrimRight(nameBuf);
+            if (!n.empty())
+            {
+                CreateDirectoryA((ConfigDir() + "\\profiles").c_str(), nullptr);
+                SaveCfg();
+                if (CopyFileA(gCfgPath.c_str(), ProfilePath(n).c_str(), FALSE))
+                {
+                    ListProfiles(profiles);
+                    cfgMsg = "已保存为新配置 " + n;
+                }
+                else cfgMsg = "保存失败";
+            }
+            else cfgMsg = "请先填写配置名";
+        }
+
+        ImGui::SetNextItemWidth(320.0f);
+        ImGui::InputText("文件路径", pathBuf, sizeof(pathBuf));
+        ImGui::SameLine();
+        if (ImGui::Button("导出到该路径"))
+        {
+            std::string p2 = TrimRight(pathBuf);
+            if (p2.empty()) cfgMsg = "请先填写导出路径";
+            else
+            {
+                SaveCfg();
+                cfgMsg = CopyFileA(gCfgPath.c_str(), p2.c_str(), FALSE) ? "已导出" : "导出失败";
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("从该路径导入"))
+        {
+            std::string p2 = TrimRight(pathBuf);
+            if (p2.empty()) cfgMsg = "请先填写导入路径";
+            else
+            {
+                std::string base = p2;
+                size_t sl = base.find_last_of("\\/");
+                if (sl != std::string::npos) base = base.substr(sl + 1);
+                size_t dot = base.find_last_of('.');
+                if (dot != std::string::npos) base = base.substr(0, dot);
+
+                CreateDirectoryA((ConfigDir() + "\\profiles").c_str(), nullptr);
+                std::string dest = ProfilePath(base);
+                if (CopyFileA(p2.c_str(), dest.c_str(), FALSE))
+                {
+                    ListProfiles(profiles);
+                    cfgMsg = ApplyConfigFile(dest) ? ("已导入并加载 " + base) : "已导入，加载失败";
+                }
+                else cfgMsg = "导入失败（检查路径）";
+            }
+        }
+
+        if (!cfgMsg.empty()) ImGui::TextDisabled("%s", cfgMsg.c_str());
+    }
 
     if (ImGui::CollapsingHeader("快捷键###hotkeys_section"))
     {
