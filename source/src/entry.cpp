@@ -765,7 +765,7 @@ static void SaveCfg()
 {
     if (gCfgPath.empty()) return;
 
-    std::ofstream out(gCfgPath.c_str(), std::ios::binary | std::ios::trunc);
+    std::ofstream out(Utf8ToWide(gCfgPath).c_str(), std::ios::binary | std::ios::trunc);
     if (!out) return;
 
     out << "prefix=" << EscapeText(gCfg.prefix) << "\n";
@@ -818,7 +818,7 @@ static void LoadCfg()
 {
     SetDefaults();
 
-    std::ifstream in(gCfgPath.c_str(), std::ios::binary);
+    std::ifstream in(Utf8ToWide(gCfgPath).c_str(), std::ios::binary);
     if (!in) return;
 
     int wantCount = -1;
@@ -1533,11 +1533,11 @@ static std::string NormalizeConfigPath(const std::string& raw, bool forExport)
         return p;
     }
 
-    size_t sl = p.find_last_of("\/");
+    size_t sl = p.find_last_of("\\/");
     if (sl == std::string::npos)
     {
         p = ConfigDir() + "\\" + p;
-        sl = p.find_last_of("\/");
+        sl = p.find_last_of("\\/");
     }
 
     std::string file = p.substr(sl + 1);
@@ -1553,6 +1553,18 @@ static std::string DesktopDir()
     wchar_t wbuf[MAX_PATH] = {};
     if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_DESKTOPDIRECTORY, nullptr, 0, wbuf))) return WideToUtf8(wbuf);
     return std::string();
+}
+
+static bool LooksLikeQuickChatIni(const std::string& path)
+{
+    std::ifstream in(Utf8ToWide(path).c_str(), std::ios::binary);
+    if (!in) return false;
+    std::string buf(8192, char(0));
+    in.read(&buf[0], (std::streamsize)buf.size());
+    buf.resize((size_t)in.gcount());
+    if (buf.find("slot1.text=") != std::string::npos) return true;
+    if (buf.find("count=") != std::string::npos) return true;
+    return false;
 }
 
 static std::string FindNewestIniInDir(const std::string& dir)
@@ -1941,39 +1953,84 @@ void RenderOptions()
         if (ImGui::Button("从该路径导入"))
         {
             std::string p2 = CleanPath(pathBuf);
-            bool ok = false;
             if (p2.empty())
             {
                 cfgMsg = "请先填写导入路径";
             }
-            else
+            else if (PathIsDirUtf8(p2))
             {
-                if (PathIsDirUtf8(p2))
+                // 目录：把里面所有格式正确的 .ini 全部导入
+                std::string pattern = p2 + "\\*.ini";
+                WIN32_FIND_DATAW fd;
+                HANDLE h = FindFirstFileW(Utf8ToWide(pattern).c_str(), &fd);
+                int imported = 0;
+                int badFormat = 0;
+                int failed = 0;
+                std::string newestDest;
+                ULARGE_INTEGER newestTime = { 0, 0 };
+
+                MakeDirUtf8(ConfigDir() + "\\profiles");
+                if (h != INVALID_HANDLE_VALUE)
                 {
-                    std::string newest = FindNewestIniInDir(p2);
-                    if (newest.empty())
-                        cfgMsg = "该目录下没有 .ini 文件：" + p2;
-                    else
+                    do
                     {
-                        p2 = newest;
-                        ok = true;
-                    }
+                        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+                        std::string fname = WideToUtf8(fd.cFileName);
+                        std::string src = p2 + "\\" + fname;
+                        if (!LooksLikeQuickChatIni(src)) { badFormat++; continue; }
+
+                        std::string base = fname;
+                        size_t dot = base.find_last_of('.');
+                        if (dot != std::string::npos) base = base.substr(0, dot);
+
+                        std::string dest = ProfilePath(base);
+                        if (CopyFileUtf8(src, dest))
+                        {
+                            imported++;
+                            ULARGE_INTEGER t;
+                            t.LowPart = fd.ftLastWriteTime.dwLowDateTime;
+                            t.HighPart = fd.ftLastWriteTime.dwHighDateTime;
+                            if (newestDest.empty() || t.QuadPart > newestTime.QuadPart)
+                            {
+                                newestTime = t;
+                                newestDest = dest;
+                            }
+                        }
+                        else failed++;
+                    } while (FindNextFileW(h, &fd));
+                    FindClose(h);
+                }
+
+                if (imported == 0)
+                {
+                    cfgMsg = "没有可导入的配置（目录内 .ini 格式不符或为空）";
                 }
                 else
                 {
-                    ok = true;
+                    ListProfiles(profiles);
+                    if (!newestDest.empty()) ApplyConfigFile(newestDest);
+                    char msg[160];
+                    snprintf(msg, sizeof(msg), "已导入 %d 个配置（格式不符 %d，失败 %d）", imported, badFormat, failed);
+                    cfgMsg = msg;
                 }
-
-                if (ok && !PathExistsUtf8(p2))
+            }
+            else
+            {
+                if (!PathExistsUtf8(p2))
                 {
                     cfgMsg = "文件不存在：" + p2;
-                    ok = false;
                 }
-
-                if (ok)
+                else if (!LooksLikeQuickChatIni(p2))
+                {
+                    cfgMsg = "不是快捷喊话的配置文件：" + p2;
+                }
+                else
                 {
                     std::string base = p2;
                     size_t sl = base.find_last_of("\\/");
+                    // 兼容两种分隔符
+                    size_t sl2 = base.find_last_of('/');
+                    if (sl2 != std::string::npos && (sl == std::string::npos || sl2 > sl)) sl = sl2;
                     if (sl != std::string::npos) base = base.substr(sl + 1);
                     size_t dot = base.find_last_of('.');
                     if (dot != std::string::npos) base = base.substr(0, dot);
@@ -1989,6 +2046,8 @@ void RenderOptions()
                 }
             }
         }
+
+        ImGui::TextDisabled("导入可填 .ini 文件或目录：目录内所有格式正确的 .ini 都会导入并保留为配置");
 
         if (!cfgMsg.empty()) ImGui::TextDisabled("%s", cfgMsg.c_str());
     }
