@@ -1655,7 +1655,7 @@ void RenderOptions()
     if (ImGui::CollapsingHeader("快捷键###hotkeys_section"))
     {
         ImGui::TextDisabled("每条句子的快捷键在 Nexus → 输入绑定 里单独设置，默认都不绑定。");
-        ImGui::TextDisabled("面板开关的绑定名是 QUICKCHAT_TOGGLE（默认 CTRL+ALT+M）。");
+        ImGui::TextDisabled("显示/隐藏悬浮面板：绑定名 QUICKCHAT_PANEL，默认 F9。");
         ImGui::TextDisabled("注意：快捷键按条目序号对应，拖动或删除条目后要重新确认。");
     }
 
@@ -1678,7 +1678,7 @@ void OnInputBind(const char* aIdentifier, bool aIsRelease)
 {
     if (aIsRelease || !aIdentifier) return;
 
-    if (strcmp(aIdentifier, "QUICKCHAT_TOGGLE") == 0)
+    if (strcmp(aIdentifier, "QUICKCHAT_PANEL") == 0 || strcmp(aIdentifier, "QUICKCHAT_TOGGLE") == 0)
     {
         gCfg.showPanel = !gCfg.showPanel;
         return;
@@ -1759,7 +1759,8 @@ void AddonLoad(AddonAPI_t* aApi)
     APIDefs->GUI_Register(RT_OptionsRender, RenderOptions);
 
     for (int i = 0; i < (int)gCfg.slots.size(); i++) RegisterSlotBind(i);
-    APIDefs->InputBinds_RegisterWithString("QUICKCHAT_TOGGLE", OnInputBind, "CTRL+ALT+M");
+    APIDefs->InputBinds_Deregister("QUICKCHAT_TOGGLE");
+    APIDefs->InputBinds_RegisterWithString("QUICKCHAT_PANEL", OnInputBind, "F9");
 
     gWorkerStop = false;
     gWorker = std::thread(WorkerLoop);
@@ -1777,6 +1778,7 @@ void AddonUnload()
     if (gWorker.joinable()) gWorker.join();
 
     for (int i = 0; i < (int)gCfg.slots.size(); i++) DeregisterSlotBind(i);
+    APIDefs->InputBinds_Deregister("QUICKCHAT_PANEL");
     APIDefs->InputBinds_Deregister("QUICKCHAT_TOGGLE");
 
     APIDefs->GUI_Deregister(RenderMain);
