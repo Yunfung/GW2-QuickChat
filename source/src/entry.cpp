@@ -1816,6 +1816,8 @@ void RenderOptions()
     int moveIndex = -1;
     int moveDir = 0;
     bool sortNeeded = false;
+    static int pendingDelSlot = -1;
+    static bool wantDelSlotConfirm = false;
     int dragFrom = -1;
     int dragTo = -1;
 
@@ -1831,7 +1833,11 @@ void RenderOptions()
             ImGui::PushID(i);
             SlotCfg& slot = gCfg.slots[i];
 
-            if (ImGui::Button("删除")) removeIndex = i;
+            if (ImGui::Button("删除"))
+            {
+                pendingDelSlot = i;
+                wantDelSlotConfirm = true;
+            }
             ImGui::SameLine();
 
             if (gCfg.pageCount > 1)
@@ -1879,6 +1885,30 @@ void RenderOptions()
     }
 
     if (dragFrom >= 0 && dragTo >= 0) MoveSlotTo(dragFrom, dragTo);
+
+    if (wantDelSlotConfirm)
+    {
+        ImGui::OpenPopup("确认删除句子###qc_delslot");
+        wantDelSlotConfirm = false;
+    }
+    if (ImGui::BeginPopupModal("确认删除句子###qc_delslot", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+    {
+        if (pendingDelSlot >= 0 && pendingDelSlot < (int)gCfg.slots.size())
+        {
+            const SlotCfg& d = gCfg.slots[(size_t)pendingDelSlot];
+            ImGui::Text("确定删除第 %d 条吗？", pendingDelSlot + 1);
+            ImGui::TextDisabled("%s", d.label.empty() ? d.text.c_str() : d.label.c_str());
+        }
+        ImGui::Spacing();
+        if (ImGui::Button("确认删除", ImVec2(100, 0)))
+        {
+            removeIndex = pendingDelSlot;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("取消", ImVec2(100, 0))) ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
 
     if (sortNeeded) SortSlotsByPage(&gEditSlot);
 
