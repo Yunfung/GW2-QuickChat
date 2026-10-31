@@ -228,7 +228,7 @@ static void MakeDirUtf8(const std::string& p)
 static bool MoveFileUtf8(const std::string& src, const std::string& dst)
 {
     return MoveFileExW(Utf8ToWide(src).c_str(), Utf8ToWide(dst).c_str(),
-        MOVEFILE_REPLACE_EXISTING | MOVEFILE_COPY_ALLOWED) != 0;
+        MOVEFILE_COPY_ALLOWED) != 0;
 }
 
 static bool DeleteFileUtf8(const std::string& p)
@@ -1915,7 +1915,11 @@ void RenderOptions()
                 std::string src = ProfilePath(profiles[(size_t)sel]);
                 std::string dst = ProfilePath(n);
                 SetLastError(0);
-                if (MoveFileUtf8(src, dst))
+                if (n == profiles[(size_t)sel])
+                    cfgMsg = "名字没有变化";
+                else if (PathExistsUtf8(dst))
+                    cfgMsg = "已存在同名配置：" + n + "，请换一个名字";
+                else if (MoveFileUtf8(src, dst))
                 {
                     ListProfiles(profiles);
                     sel = -1;
