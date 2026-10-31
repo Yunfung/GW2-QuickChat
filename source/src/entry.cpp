@@ -6,6 +6,7 @@
 #define NOMINMAX
 #define _CRT_SECURE_NO_WARNINGS
 #include <Windows.h>
+#include <shlobj.h>
 
 #include <algorithm>
 #include <atomic>
@@ -1470,6 +1471,53 @@ static std::string ProfilePath(const std::string& name)
     return ConfigDir() + "\\profiles\\" + name + ".ini";
 }
 
+static std::string CleanPath(const char* in)
+{
+    std::string p = TrimRight(in);
+    size_t b = p.find_first_not_of(" 	");
+    if (b == std::string::npos) return std::string();
+    p = p.substr(b);
+    if (p.size() >= 2 && p.front() == '"' && p.back() == '"') p = p.substr(1, p.size() - 2);
+    return p;
+}
+
+// 补全导出/导入路径：目录自动补文件名，缺扩展名补 .ini，相对路径放到插件目录
+static std::string NormalizeConfigPath(const std::string& raw, bool forExport)
+{
+    std::string p = raw;
+    if (p.empty()) return p;
+
+    DWORD attr = GetFileAttributesA(p.c_str());
+    bool isDir = (attr != INVALID_FILE_ATTRIBUTES) && (attr & FILE_ATTRIBUTE_DIRECTORY);
+    if (isDir || (!p.empty() && (p.back() == '\\' || p.back() == '/')))
+    {
+        if (!p.empty() && (p.back() == '\\' || p.back() == '/')) {}
+        else p += "\\";
+        p += "QuickChat-config.ini";
+        return p;
+    }
+
+    size_t sl = p.find_last_of("\/");
+    if (sl == std::string::npos)
+    {
+        p = ConfigDir() + "\\" + p;
+        sl = p.find_last_of("\/");
+    }
+
+    std::string file = p.substr(sl + 1);
+    if (file.size() < 4 || _stricmp(file.c_str() + file.size() - 4, ".ini") != 0)
+        p += ".ini";
+
+    return p;
+}
+
+static std::string DesktopDir()
+{
+    char buf[MAX_PATH] = {};
+    if (SUCCEEDED(SHGetFolderPathA(nullptr, CSIDL_DESKTOPDIRECTORY, nullptr, 0, buf))) return std::string(buf);
+    return std::string();
+}
+
 static void ListProfiles(std::vector<std::string>& out)
 {
     out.clear();
@@ -1794,19 +1842,46 @@ void RenderOptions()
         ImGui::SameLine();
         if (ImGui::Button("导出到该路径"))
         {
-            std::string p2 = TrimRight(pathBuf);
+            std::string p2 = NormalizeConfigPath(CleanPath(pathBuf), true);
             if (p2.empty()) cfgMsg = "请先填写导出路径";
             else
             {
+                size_t sl = p2.find_last_of("\\/");
+                if (sl != std::string::npos) CreateDirectoryA(p2.substr(0, sl).c_str(), nullptr);
                 SaveCfg();
-                cfgMsg = CopyFileA(gCfgPath.c_str(), p2.c_str(), FALSE) ? "已导出" : "导出失败";
+                SetLastError(0);
+                if (CopyFileA(gCfgPath.c_str(), p2.c_str(), FALSE))
+                    cfgMsg = "已导出：" + p2;
+                else
+                    cfgMsg = "导出失败，错误码 " + std::to_string((int)GetLastError()) + "：" + p2;
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("导出到桌面"))
+        {
+            std::string desk = DesktopDir();
+            if (desk.empty()) cfgMsg = "无法定位桌面目录";
+            else
+            {
+                SYSTEMTIME st;
+                GetLocalTime(&st);
+                char name[128];
+                snprintf(name, sizeof(name), "\\QuickChat-%04u%02u%02u-%02u%02u%02u.ini",
+                    st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+                std::string dest = desk + name;
+                SaveCfg();
+                SetLastError(0);
+                if (CopyFileA(gCfgPath.c_str(), dest.c_str(), FALSE)) cfgMsg = "已导出到桌面：" + dest;
+                else cfgMsg = "导出失败，错误码 " + std::to_string((int)GetLastError());
             }
         }
         ImGui::SameLine();
         if (ImGui::Button("从该路径导入"))
         {
-            std::string p2 = TrimRight(pathBuf);
+            std::string p2 = CleanPath(pathBuf);
             if (p2.empty()) cfgMsg = "请先填写导入路径";
+            else if (GetFileAttributesA(p2.c_str()) == INVALID_FILE_ATTRIBUTES)
+                cfgMsg = "文件不存在：" + p2;
             else
             {
                 std::string base = p2;
@@ -1822,7 +1897,7 @@ void RenderOptions()
                     ListProfiles(profiles);
                     cfgMsg = ApplyConfigFile(dest) ? ("已导入并加载 " + base) : "已导入，加载失败";
                 }
-                else cfgMsg = "导入失败（检查路径）";
+                else cfgMsg = "导入失败，错误码 " + std::to_string((int)GetLastError());
             }
         }
 
