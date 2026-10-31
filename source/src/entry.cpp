@@ -97,7 +97,6 @@ static std::string ChannelLabel(const std::vector<std::string>& list)
 struct SlotCfg
 {
     bool enabled = true;
-    bool restoreChannel = false;
     int page = 1;
     std::string text;
     std::vector<std::string> channels;
@@ -171,13 +170,7 @@ static bool gUseMessages = true;
 /* sending queue */
 static std::mutex gQueueMx;
 static std::condition_variable gQueueCv;
-struct SendJob
-{
-    std::vector<std::string> lines;
-    std::string restoreTo;
-};
-static std::deque<SendJob> gQueue;
-static std::string gLastChannel;
+static std::deque<std::vector<std::string> > gQueue;
 static std::atomic<bool> gWorkerStop(false);
 static std::thread gWorker;
 
@@ -242,7 +235,6 @@ static bool DeleteFileUtf8(const std::string& p)
 {
     return DeleteFileW(Utf8ToWide(p).c_str()) != 0;
 }
-
 
 static std::string TrimRight(const std::string& s)
 {
@@ -645,7 +637,7 @@ static void SendLinesViaInput(const std::vector<std::string>& lines)
     if (hadOld) ClipboardSet(oldText);
 }
 
-static void SendLinesOnce(const std::vector<std::string>& lines)
+static void SendLines(const std::vector<std::string>& lines)
 {
     if (gCfg.useMessages && APIDefs && APIDefs->WndProc_SendToGameOnly)
         SendLinesViaMessages(lines);
@@ -653,24 +645,11 @@ static void SendLinesOnce(const std::vector<std::string>& lines)
         SendLinesViaInput(lines);
 }
 
-static void SendLines(const std::vector<std::string>& lines, const std::string& restoreTo)
-{
-    SendLinesOnce(lines);
-
-    if (!restoreTo.empty())
-    {
-        std::vector<std::string> one;
-        one.push_back("/" + restoreTo);
-        SendLinesOnce(one);
-        LogInfo("已切回频道 /" + restoreTo);
-    }
-}
-
 static void WorkerLoop()
 {
     for (;;)
     {
-        SendJob job;
+        std::vector<std::string> job;
         {
             std::unique_lock<std::mutex> lock(gQueueMx);
             gQueueCv.wait(lock, [] { return gWorkerStop.load() || !gQueue.empty(); });
@@ -678,7 +657,7 @@ static void WorkerLoop()
             job = gQueue.front();
             gQueue.pop_front();
         }
-        SendLines(job.lines, job.restoreTo);
+        SendLines(job);
     }
 }
 
@@ -716,21 +695,9 @@ static void QueueSlot(int index)
     std::vector<std::string> lines = BuildLines(index);
     if (lines.empty()) return;
 
-    std::string restoreTo;
-    if (slot.restoreChannel && !gLastChannel.empty())
-        restoreTo = gLastChannel;
-
-    std::string usedChannel;
-    if (!slot.channels.empty()) usedChannel = slot.channels.back();
-    if (!usedChannel.empty()) gLastChannel = usedChannel;
-    else restoreTo.clear();
-
     {
-        SendJob job;
-        job.lines = lines;
-        job.restoreTo = restoreTo;
         std::lock_guard<std::mutex> lock(gQueueMx);
-        gQueue.push_back(job);
+        gQueue.push_back(lines);
     }
     gQueueCv.notify_one();
 
@@ -865,7 +832,6 @@ static void SaveCfg()
         const SlotCfg& slot = gCfg.slots[i];
         out << "slot" << (i + 1) << ".enabled=" << (slot.enabled ? 1 : 0) << "\n";
         out << "slot" << (i + 1) << ".page=" << slot.page << "\n";
-        out << "slot" << (i + 1) << ".restore=" << (slot.restoreChannel ? 1 : 0) << "\n";
         out << "slot" << (i + 1) << ".text=" << EscapeText(slot.text) << "\n";
         out << "slot" << (i + 1) << ".channels=" << ChannelSummary(slot.channels) << "\n";
     }
@@ -959,10 +925,6 @@ static void LoadCfg()
                 if (strcmp(field, "enabled") == 0)
                 {
                     slot.enabled = atoi(val.c_str()) != 0;
-                }
-                else if (strcmp(field, "restore") == 0)
-                {
-                    slot.restoreChannel = atoi(val.c_str()) != 0;
                 }
                 else if (strcmp(field, "page") == 0)
                 {
@@ -1299,7 +1261,6 @@ void RenderMain()
         {
             ImGui::SetWindowFontScale(gCfg.fontScale);
         }
-
 
         std::vector<int> visible;
         for (int i = 0; i < (int)gCfg.slots.size(); i++)
@@ -1708,10 +1669,6 @@ static void DrawSlotEditor(int index)
 
     ImGui::Indent(16.0f);
     ImGui::Checkbox("启用", &slot.enabled);
-    ImGui::SameLine();
-    ImGui::Checkbox("发送后切回上次频道", &slot.restoreChannel);
-    if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("发送完把聊天频道切回上一次发送用的频道。\n频道是插件自己记录的；在游戏里手动切过频道时可能不准。");
 
     static char editBuf[512] = {};
     static int editBufFor = -1;
