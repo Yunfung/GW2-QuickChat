@@ -1749,7 +1749,7 @@ void RenderOptions()
     if (!gCfg.showPanel)
     {
         ImGui::SameLine();
-        ImGui::TextDisabled("（已隐藏，按 CTRL+ALT+M 可呼出）");
+        ImGui::TextDisabled("（已隐藏，按 F9 呼出）");
     }
     ImGui::SliderInt("面板背景透明度", &gCfg.alphaPct, 0, 100, "%d%%");
     ImGui::SliderInt("按钮透明度", &gCfg.btnAlphaPct, 0, 100, "%d%%");
