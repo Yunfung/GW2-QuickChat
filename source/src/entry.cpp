@@ -1555,6 +1555,31 @@ static std::string DesktopDir()
     return std::string();
 }
 
+static std::string FindNewestIniInDir(const std::string& dir)
+{
+    std::string pattern = dir + "\*.ini";
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW(Utf8ToWide(pattern).c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) return std::string();
+
+    std::string best;
+    ULARGE_INTEGER bestTime = { 0, 0 };
+    do
+    {
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+        ULARGE_INTEGER t;
+        t.LowPart = fd.ftLastWriteTime.dwLowDateTime;
+        t.HighPart = fd.ftLastWriteTime.dwHighDateTime;
+        if (best.empty() || t.QuadPart > bestTime.QuadPart)
+        {
+            bestTime = t;
+            best = dir + "\\" + WideToUtf8(fd.cFileName);
+        }
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+    return best;
+}
+
 static void ListProfiles(std::vector<std::string>& out)
 {
     out.clear();
@@ -1916,25 +1941,52 @@ void RenderOptions()
         if (ImGui::Button("从该路径导入"))
         {
             std::string p2 = CleanPath(pathBuf);
-            if (p2.empty()) cfgMsg = "请先填写导入路径";
-            else if (!PathExistsUtf8(p2))
-                cfgMsg = "文件不存在：" + p2;
+            bool ok = false;
+            if (p2.empty())
+            {
+                cfgMsg = "请先填写导入路径";
+            }
             else
             {
-                std::string base = p2;
-                size_t sl = base.find_last_of("\\/");
-                if (sl != std::string::npos) base = base.substr(sl + 1);
-                size_t dot = base.find_last_of('.');
-                if (dot != std::string::npos) base = base.substr(0, dot);
-
-                MakeDirUtf8(ConfigDir() + "\\profiles");
-                std::string dest = ProfilePath(base);
-                if (CopyFileUtf8(p2, dest))
+                if (PathIsDirUtf8(p2))
                 {
-                    ListProfiles(profiles);
-                    cfgMsg = ApplyConfigFile(dest) ? ("已导入并加载 " + base) : "已导入，加载失败";
+                    std::string newest = FindNewestIniInDir(p2);
+                    if (newest.empty())
+                        cfgMsg = "该目录下没有 .ini 文件：" + p2;
+                    else
+                    {
+                        p2 = newest;
+                        ok = true;
+                    }
                 }
-                else cfgMsg = "导入失败，错误码 " + std::to_string((int)GetLastError());
+                else
+                {
+                    ok = true;
+                }
+
+                if (ok && !PathExistsUtf8(p2))
+                {
+                    cfgMsg = "文件不存在：" + p2;
+                    ok = false;
+                }
+
+                if (ok)
+                {
+                    std::string base = p2;
+                    size_t sl = base.find_last_of("\\/");
+                    if (sl != std::string::npos) base = base.substr(sl + 1);
+                    size_t dot = base.find_last_of('.');
+                    if (dot != std::string::npos) base = base.substr(0, dot);
+
+                    MakeDirUtf8(ConfigDir() + "\\profiles");
+                    std::string dest = ProfilePath(base);
+                    if (CopyFileUtf8(p2, dest))
+                    {
+                        ListProfiles(profiles);
+                        cfgMsg = ApplyConfigFile(dest) ? ("已导入并加载 " + base) : "已导入，加载失败";
+                    }
+                    else cfgMsg = "导入失败，错误码 " + std::to_string((int)GetLastError());
+                }
             }
         }
 
