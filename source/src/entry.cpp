@@ -1840,6 +1840,8 @@ void RenderOptions()
         static char renameBuf[64] = "";
         static char pathBuf[260] = "";
         static std::string cfgMsg;
+        static bool wantDeleteConfirm = false;
+        static std::string pendingDelete;
 
         if (!profilesLoaded)
         {
@@ -1895,11 +1897,34 @@ void RenderOptions()
         {
             if (hasSel)
             {
-                DeleteFileUtf8(ProfilePath(profiles[(size_t)sel]));
-                cfgMsg = "已删除 " + profiles[(size_t)sel];
+                pendingDelete = profiles[(size_t)sel];
+                wantDeleteConfirm = true;
+            }
+        }
+
+        if (wantDeleteConfirm)
+        {
+            ImGui::OpenPopup("确认删除配置###qc_delcfg");
+            wantDeleteConfirm = false;
+        }
+        if (ImGui::BeginPopupModal("确认删除配置###qc_delcfg", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            ImGui::Text("确定删除配置「%s」吗？", pendingDelete.c_str());
+            ImGui::TextDisabled("只删除 profiles 目录下的这份配置，当前生效的配置不受影响。");
+            ImGui::Spacing();
+            if (ImGui::Button("确认删除", ImVec2(100, 0)))
+            {
+                if (!pendingDelete.empty() && DeleteFileUtf8(ProfilePath(pendingDelete)))
+                    cfgMsg = "已删除 " + pendingDelete;
+                else
+                    cfgMsg = "删除失败，错误码 " + std::to_string((int)GetLastError());
                 ListProfiles(profiles);
                 sel = -1;
+                ImGui::CloseCurrentPopup();
             }
+            ImGui::SameLine();
+            if (ImGui::Button("取消", ImVec2(100, 0))) ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
         }
 
         ImGui::SetNextItemWidth(160.0f);
