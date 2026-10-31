@@ -1687,6 +1687,20 @@ static void DrawSlotEditor(int index)
     }
     if (ImGui::InputText("消息", editBuf, sizeof(editBuf))) slot.text = editBuf;
 
+    if (ImGui::Button("消息从剪贴板粘贴"))
+    {
+        std::wstring w;
+        if (ClipboardGet(&w) && !w.empty())
+        {
+            slot.text = WideToUtf8(w);
+            editBufFor = -1;
+        }
+    }
+    ImGui::SameLine();
+    ImGui::TextDisabled("Nexus 内打不了中文，先在别处复制再点这里");
+
+    ImGui::Spacing();
+
     static char labelBuf[512] = {};
     static int labelBufFor = -1;
     if (labelBufFor != index)
@@ -1709,19 +1723,7 @@ static void DrawSlotEditor(int index)
         }
     }
     ImGui::SameLine();
-    ImGui::TextDisabled("仅影响按钮上显示的文字，发送内容仍是上面的“消息”");
-
-    if (ImGui::Button("从剪贴板粘贴"))
-    {
-        std::wstring w;
-        if (ClipboardGet(&w) && !w.empty())
-        {
-            slot.text = WideToUtf8(w);
-            editBufFor = -1;
-        }
-    }
-    ImGui::SameLine();
-    ImGui::TextDisabled("Nexus 内打不了中文，先在别处复制再点这里");
+    ImGui::TextDisabled("仅影响按钮显示，发送内容仍是上面的“消息”");
 
     ImGui::Text("发送频道（不勾选则为当前频道）：");
     for (int c = 0; c < kChannelCount; c++)
