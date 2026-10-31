@@ -99,6 +99,7 @@ struct SlotCfg
     bool enabled = true;
     int page = 1;
     std::string text;
+    std::string label;
     std::vector<std::string> channels;
 };
 
@@ -833,6 +834,7 @@ static void SaveCfg()
         out << "slot" << (i + 1) << ".enabled=" << (slot.enabled ? 1 : 0) << "\n";
         out << "slot" << (i + 1) << ".page=" << slot.page << "\n";
         out << "slot" << (i + 1) << ".text=" << EscapeText(slot.text) << "\n";
+        out << "slot" << (i + 1) << ".label=" << EscapeText(slot.label) << "\n";
         out << "slot" << (i + 1) << ".channels=" << ChannelSummary(slot.channels) << "\n";
     }
 }
@@ -934,6 +936,10 @@ static void LoadCfg()
                 {
                     slot.text = UnescapeText(val);
                 }
+                else if (strcmp(field, "label") == 0)
+                {
+                    slot.label = UnescapeText(val);
+                }
                 else if (strcmp(field, "channels") == 0)
                 {
                     slot.channels.clear();
@@ -1014,7 +1020,9 @@ static void DrawSlotButton(int index, ImVec2 size)
     SlotCfg& slot = gCfg.slots[index];
 
     ImGui::PushID(index);
-    if (ImGui::Button(slot.text.c_str(), size))
+    std::string shown = slot.label.empty() ? slot.text : slot.label;
+    shown += "###qc_btn";
+    if (ImGui::Button(shown.c_str(), size))
     {
         gChannelMenuSlot = -1;
         QueueSlot(index);
@@ -1678,6 +1686,30 @@ static void DrawSlotEditor(int index)
         editBufFor = index;
     }
     if (ImGui::InputText("消息", editBuf, sizeof(editBuf))) slot.text = editBuf;
+
+    static char labelBuf[512] = {};
+    static int labelBufFor = -1;
+    if (labelBufFor != index)
+    {
+        snprintf(labelBuf, sizeof(labelBuf), "%s", slot.label.c_str());
+        labelBufFor = index;
+    }
+    ImGui::SetNextItemWidth(320.0f);
+    if (ImGui::InputText("显示内容", labelBuf, sizeof(labelBuf))) slot.label = labelBuf;
+    ImGui::SameLine();
+    ImGui::TextDisabled("留空则面板上显示消息内容");
+
+    if (ImGui::Button("显示内容从剪贴板粘贴"))
+    {
+        std::wstring w;
+        if (ClipboardGet(&w) && !w.empty())
+        {
+            slot.label = WideToUtf8(w);
+            labelBufFor = -1;
+        }
+    }
+    ImGui::SameLine();
+    ImGui::TextDisabled("仅影响按钮上显示的文字，发送内容仍是上面的“消息”");
 
     if (ImGui::Button("从剪贴板粘贴"))
     {
