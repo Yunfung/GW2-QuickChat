@@ -204,6 +204,33 @@ static std::wstring Utf8ToWide(const std::string& s)
     return w;
 }
 
+static bool CopyFileUtf8(const std::string& src, const std::string& dst)
+{
+    return CopyFileW(Utf8ToWide(src).c_str(), Utf8ToWide(dst).c_str(), FALSE) != 0;
+}
+
+static bool PathExistsUtf8(const std::string& p)
+{
+    return GetFileAttributesW(Utf8ToWide(p).c_str()) != INVALID_FILE_ATTRIBUTES;
+}
+
+static bool PathIsDirUtf8(const std::string& p)
+{
+    DWORD a = GetFileAttributesW(Utf8ToWide(p).c_str());
+    return a != INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_DIRECTORY) != 0;
+}
+
+static void MakeDirUtf8(const std::string& p)
+{
+    CreateDirectoryW(Utf8ToWide(p).c_str(), nullptr);
+}
+
+static bool DeleteFileUtf8(const std::string& p)
+{
+    return DeleteFileW(Utf8ToWide(p).c_str()) != 0;
+}
+
+
 static std::string TrimRight(const std::string& s)
 {
     size_t e = s.size();
@@ -685,7 +712,7 @@ static void InitPaths()
     }
 
     size_t sep = gCfgPath.find_last_of('\\');
-    if (sep != std::string::npos) CreateDirectoryA(gCfgPath.substr(0, sep).c_str(), nullptr);
+    if (sep != std::string::npos) MakeDirUtf8(gCfgPath.substr(0, sep));
 }
 
 static void SetDefaults()
@@ -1487,8 +1514,7 @@ static std::string NormalizeConfigPath(const std::string& raw, bool forExport)
     std::string p = raw;
     if (p.empty()) return p;
 
-    DWORD attr = GetFileAttributesA(p.c_str());
-    bool isDir = (attr != INVALID_FILE_ATTRIBUTES) && (attr & FILE_ATTRIBUTE_DIRECTORY);
+    bool isDir = PathIsDirUtf8(p);
     if (isDir || (!p.empty() && (p.back() == '\\' || p.back() == '/')))
     {
         if (!p.empty() && (p.back() == '\\' || p.back() == '/')) {}
@@ -1514,7 +1540,8 @@ static std::string NormalizeConfigPath(const std::string& raw, bool forExport)
 static std::string DesktopDir()
 {
     char buf[MAX_PATH] = {};
-    if (SUCCEEDED(SHGetFolderPathA(nullptr, CSIDL_DESKTOPDIRECTORY, nullptr, 0, buf))) return std::string(buf);
+    wchar_t wbuf[MAX_PATH] = {};
+    if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_DESKTOPDIRECTORY, nullptr, 0, wbuf))) return WideToUtf8(wbuf);
     return std::string();
 }
 
@@ -1522,16 +1549,16 @@ static void ListProfiles(std::vector<std::string>& out)
 {
     out.clear();
     std::string pattern = ConfigDir() + "\\profiles\\*.ini";
-    WIN32_FIND_DATAA fd;
-    HANDLE h = FindFirstFileA(pattern.c_str(), &fd);
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW(Utf8ToWide(pattern).c_str(), &fd);
     if (h == INVALID_HANDLE_VALUE) return;
     do
     {
         if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
-        std::string n = fd.cFileName;
+        std::string n = WideToUtf8(fd.cFileName);
         if (n.size() > 4 && n.compare(n.size() - 4, 4, ".ini") == 0)
             out.push_back(n.substr(0, n.size() - 4));
-    } while (FindNextFileA(h, &fd));
+    } while (FindNextFileW(h, &fd));
     FindClose(h);
     std::sort(out.begin(), out.end());
 }
@@ -1539,7 +1566,7 @@ static void ListProfiles(std::vector<std::string>& out)
 // 用一份配置文件替换当前配置并重新加载（快捷键绑定同步增删）
 static bool ApplyConfigFile(const std::string& path)
 {
-    if (!CopyFileA(path.c_str(), gCfgPath.c_str(), FALSE)) return false;
+    if (!CopyFileUtf8(path, gCfgPath)) return false;
 
     int oldCount = (int)gCfg.slots.size();
     gEditSlot = -1;
@@ -1762,7 +1789,7 @@ void RenderOptions()
 
         if (!profilesLoaded)
         {
-            CreateDirectoryA((ConfigDir() + "\\profiles").c_str(), nullptr);
+            MakeDirUtf8(ConfigDir() + "\\profiles");
             ListProfiles(profiles);
             profilesLoaded = true;
         }
@@ -1793,8 +1820,8 @@ void RenderOptions()
             if (hasSel)
             {
                 SaveCfg();
-                CreateDirectoryA((ConfigDir() + "\\profiles").c_str(), nullptr);
-                if (CopyFileA(gCfgPath.c_str(), ProfilePath(profiles[(size_t)sel]).c_str(), FALSE))
+                MakeDirUtf8(ConfigDir() + "\\profiles");
+                if (CopyFileUtf8(gCfgPath, ProfilePath(profiles[(size_t)sel])))
                     cfgMsg = "已保存到 " + profiles[(size_t)sel];
                 else cfgMsg = "保存失败";
             }
@@ -1810,7 +1837,7 @@ void RenderOptions()
         {
             if (hasSel)
             {
-                DeleteFileA(ProfilePath(profiles[(size_t)sel]).c_str());
+                DeleteFileUtf8(ProfilePath(profiles[(size_t)sel]));
                 cfgMsg = "已删除 " + profiles[(size_t)sel];
                 ListProfiles(profiles);
                 sel = -1;
@@ -1825,9 +1852,9 @@ void RenderOptions()
             std::string n = TrimRight(nameBuf);
             if (!n.empty())
             {
-                CreateDirectoryA((ConfigDir() + "\\profiles").c_str(), nullptr);
+                MakeDirUtf8(ConfigDir() + "\\profiles");
                 SaveCfg();
-                if (CopyFileA(gCfgPath.c_str(), ProfilePath(n).c_str(), FALSE))
+                if (CopyFileUtf8(gCfgPath, ProfilePath(n)))
                 {
                     ListProfiles(profiles);
                     cfgMsg = "已保存为新配置 " + n;
@@ -1847,10 +1874,10 @@ void RenderOptions()
             else
             {
                 size_t sl = p2.find_last_of("\\/");
-                if (sl != std::string::npos) CreateDirectoryA(p2.substr(0, sl).c_str(), nullptr);
+                if (sl != std::string::npos) MakeDirUtf8(p2.substr(0, sl));
                 SaveCfg();
                 SetLastError(0);
-                if (CopyFileA(gCfgPath.c_str(), p2.c_str(), FALSE))
+                if (CopyFileUtf8(gCfgPath, p2))
                     cfgMsg = "已导出：" + p2;
                 else
                     cfgMsg = "导出失败，错误码 " + std::to_string((int)GetLastError()) + "：" + p2;
@@ -1871,7 +1898,7 @@ void RenderOptions()
                 std::string dest = desk + name;
                 SaveCfg();
                 SetLastError(0);
-                if (CopyFileA(gCfgPath.c_str(), dest.c_str(), FALSE)) cfgMsg = "已导出到桌面：" + dest;
+                if (CopyFileUtf8(gCfgPath, dest)) cfgMsg = "已导出到桌面：" + dest;
                 else cfgMsg = "导出失败，错误码 " + std::to_string((int)GetLastError());
             }
         }
@@ -1880,7 +1907,7 @@ void RenderOptions()
         {
             std::string p2 = CleanPath(pathBuf);
             if (p2.empty()) cfgMsg = "请先填写导入路径";
-            else if (GetFileAttributesA(p2.c_str()) == INVALID_FILE_ATTRIBUTES)
+            else if (!PathExistsUtf8(p2))
                 cfgMsg = "文件不存在：" + p2;
             else
             {
@@ -1890,9 +1917,9 @@ void RenderOptions()
                 size_t dot = base.find_last_of('.');
                 if (dot != std::string::npos) base = base.substr(0, dot);
 
-                CreateDirectoryA((ConfigDir() + "\\profiles").c_str(), nullptr);
+                MakeDirUtf8(ConfigDir() + "\\profiles");
                 std::string dest = ProfilePath(base);
-                if (CopyFileA(p2.c_str(), dest.c_str(), FALSE))
+                if (CopyFileUtf8(p2, dest))
                 {
                     ListProfiles(profiles);
                     cfgMsg = ApplyConfigFile(dest) ? ("已导入并加载 " + base) : "已导入，加载失败";
