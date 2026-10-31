@@ -225,6 +225,12 @@ static void MakeDirUtf8(const std::string& p)
     CreateDirectoryW(Utf8ToWide(p).c_str(), nullptr);
 }
 
+static bool MoveFileUtf8(const std::string& src, const std::string& dst)
+{
+    return MoveFileExW(Utf8ToWide(src).c_str(), Utf8ToWide(dst).c_str(),
+        MOVEFILE_REPLACE_EXISTING | MOVEFILE_COPY_ALLOWED) != 0;
+}
+
 static bool DeleteFileUtf8(const std::string& p)
 {
     return DeleteFileW(Utf8ToWide(p).c_str()) != 0;
@@ -1831,6 +1837,7 @@ void RenderOptions()
         static bool profilesLoaded = false;
         static int sel = -1;
         static char nameBuf[64] = "";
+        static char renameBuf[64] = "";
         static char pathBuf[260] = "";
         static std::string cfgMsg;
 
@@ -1849,7 +1856,11 @@ void RenderOptions()
         {
             for (int i = 0; i < (int)profiles.size(); i++)
             {
-                if (ImGui::Selectable(profiles[(size_t)i].c_str(), sel == i)) sel = i;
+                if (ImGui::Selectable(profiles[(size_t)i].c_str(), sel == i))
+                {
+                    sel = i;
+                    snprintf(renameBuf, sizeof(renameBuf), "%s", profiles[(size_t)i].c_str());
+                }
             }
             ImGui::EndCombo();
         }
@@ -1888,6 +1899,31 @@ void RenderOptions()
                 cfgMsg = "已删除 " + profiles[(size_t)sel];
                 ListProfiles(profiles);
                 sel = -1;
+            }
+        }
+
+        ImGui::SetNextItemWidth(160.0f);
+        ImGui::InputText("重命名为", renameBuf, sizeof(renameBuf));
+        ImGui::SameLine();
+        if (ImGui::Button("重命名选中"))
+        {
+            std::string n = CleanPath(renameBuf);
+            if (!hasSel) cfgMsg = "请先在列表里选择一个配置";
+            else if (n.empty()) cfgMsg = "请先填写新名字";
+            else
+            {
+                std::string src = ProfilePath(profiles[(size_t)sel]);
+                std::string dst = ProfilePath(n);
+                SetLastError(0);
+                if (MoveFileUtf8(src, dst))
+                {
+                    ListProfiles(profiles);
+                    sel = -1;
+                    for (int i = 0; i < (int)profiles.size(); i++)
+                        if (profiles[(size_t)i] == n) { sel = i; break; }
+                    cfgMsg = "已重命名为 " + n;
+                }
+                else cfgMsg = "重命名失败，错误码 " + std::to_string((int)GetLastError());
             }
         }
 
